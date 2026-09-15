@@ -58,7 +58,7 @@
 }
 
 /* Robot image keeps intrinsic ratio */
-.logo-robot {
+.onboarding-img-text .logo-robot {
   width: clamp(220px, 30vw, 426px);
   margin-top: 5vh;
   height: auto;
@@ -123,3 +123,5 @@
 @media (max-width: 900px) {
   .onboarding-img-text { flex-direction: column; text-align: center; }
 }
+.onboarding-page { margin:0; }
+.onboarding-img-text .logo-robot { margin:0; }

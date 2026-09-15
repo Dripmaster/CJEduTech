@@ -1,0 +1,33 @@
+import {randomUUID} from 'node:crypto';
+
+// One class per dedicated financial-education server. This must not join a
+// discussion room: discussion timers and AI activity start later in the course.
+export function initCourseControl(io) {
+  const namespace = io.of('/chat');
+  const courseRoom = 'financial-course';
+  let state = null;
+  namespace.on('connection', socket => {
+    socket.on('course:join', (payload, reply) => {
+      // Preserve the existing app's role convention. This is not a new login
+      // or authentication mechanism: the current teacher role is client-set.
+      socket.data.courseTeacher = payload?.isAdmin === true;
+      socket.join(courseRoom);
+      if (typeof reply === 'function') reply({ok:true, state});
+    });
+    socket.on('course:start-quiz', (payload, reply) => {
+      const respond = value => { if (typeof reply === 'function') reply(value); };
+      if (!socket.rooms.has(courseRoom) || !socket.data.courseTeacher) {
+        respond({ok:false, error:'강사 화면에서 퀴즈를 시작해 주세요.'});
+        return;
+      }
+      if (!Number.isInteger(payload?.round) || payload.round < 1 || payload.round > 4) {
+        respond({ok:false, error:'차시는 1~4여야 합니다.'});
+        return;
+      }
+      // A retry after an interrupted acknowledgement must not start a new quiz.
+      if (state?.round !== payload.round) state = {round:payload.round, commandId:randomUUID()};
+      namespace.to(courseRoom).emit('course:quiz', state);
+      respond({ok:true, state});
+    });
+  });
+}

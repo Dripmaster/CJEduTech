@@ -15,10 +15,10 @@ import avatar3 from '@/assets/images/avatar/avatar3.png';
 import avatar4 from '@/assets/images/avatar/avatar4.png';
 
 const BADGE_BY_TRAIT = {
-  '정직': badgeJustice,
-  '열정': badgePassion,
-  '창의': badgeCreativity,
-  '존중': badgeRespect,
+  '금융이해': badgeJustice,
+  '위험인식': badgePassion,
+  '계획성': badgeCreativity,
+  '실천의지': badgeRespect,
 };
 const AVATARS = [avatar1, avatar2, avatar3, avatar4];
 
@@ -31,12 +31,12 @@ function rankSuffix(n){
 
 /**
  * props:
- *  - trait: '정직' | '열정' | '창의' | '존중'
+ *  - trait: '금융이해' | '위험인식' | '계획성' | '실천의지'
  *  - members: Array<{ nickname:string, avatar?:string, topReacted?:{ text:string, reactionsCount:number } }>
  *    ※ members는 topReacted.reactionsCount 내림차순으로 정렬해 1..N 순위 부여
  *  - maxRows?: number  // (옵션) 시각적 제한. 스크롤은 기본 활성화
  */
-export default function TalentGroupCard({ trait='정직', members=[], hideLikes=false, maxRows, loading=false, placeholderCount=3 }) {
+export default function TalentGroupCard({ trait='금융이해', members=[], hideLikes=false, maxRows, loading=false, placeholderCount=3 }) {
   const icon = BADGE_BY_TRAIT[trait];
 
   const list = useMemo(() => {

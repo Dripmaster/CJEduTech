@@ -21,6 +21,7 @@ router.get('/scores/me', async (req, res, next) => {
         round1_score: null,
         round2_score: null,
         round3_score: null,
+        round4_score: null,
       }
     );
   } catch (e) {
@@ -30,7 +31,7 @@ router.get('/scores/me', async (req, res, next) => {
 
 // POST /api/quiz/scores -> 라운드별 점수 저장
 const bodySchema = z.object({
-  round: z.number().int().min(1).max(3),
+  round: z.number().int().min(1).max(4),
   correct: z.number().int().min(0),
   total: z.number().int().min(1),
 });

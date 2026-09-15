@@ -77,10 +77,10 @@ export default function OverallRankingCard({ ranking = [], perUser = {}, avatarM
           
           
           stats: {
-            justice: Number(labels['정직'] || 0),
-            passion: Number(labels['열정'] || 0),
-            creativity: Number(labels['창의'] || 0),
-            respect: Number(labels['존중'] || 0),
+            justice: Number(labels['금융이해'] || 0),
+            passion: Number(labels['위험인식'] || 0),
+            creativity: Number(labels['계획성'] || 0),
+            respect: Number(labels['실천의지'] || 0),
             likes: Number((info.totalReactions ?? r.totalReactions) || 0),
             messages: Number((info.totalMessages ?? r.totalMessages) || 0)
           }

@@ -64,7 +64,7 @@
   left: -10px;
   width: 55px;
   height: 55px;
-  background-image: url('../../../src/assets/images/avatar/avatarSelect.png'); /* 선택 상태 아이콘 */
+  background-image: url('../../../assets/images/avatar/avatarSelect.png'); /* 선택 상태 아이콘 */
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;

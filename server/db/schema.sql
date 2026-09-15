@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     user_id VARCHAR(36) NOT NULL,
     text TEXT NOT NULL,
     timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    tagged_trait ENUM('정직','열정','창의','존중','기타') NOT NULL,
+    tagged_trait ENUM('금융이해','위험인식','계획성','실천의지','기타') NOT NULL,
     PRIMARY KEY (message_id),
     KEY ix_chat_messages_discussion_id (discussion_id),
     KEY ix_chat_messages_user_id (user_id),
@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS reactions (
 CREATE TABLE IF NOT EXISTS badges (
     badge_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
-    trait ENUM('정직','열정','창의','존중','기타') NOT NULL,
+    trait ENUM('금융이해','위험인식','계획성','실천의지','기타') NOT NULL,
     awarded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (badge_id),
     KEY ix_badges_user_id (user_id)
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS dashboard_summaries (
     summary_id VARCHAR(36) NOT NULL,
     round_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
-    top_trait ENUM('정직','열정','창의','존중','기타') NOT NULL,
+    top_trait ENUM('금융이해','위험인식','계획성','실천의지','기타') NOT NULL,
     most_reacted_user VARCHAR(36) NOT NULL,
     chat_count INT NOT NULL,
     summary_json JSON NOT NULL,
@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS overall_summaries (
     session_id VARCHAR(36) NOT NULL,
     user_id VARCHAR(36) NOT NULL,
     total_rounds INT NOT NULL,
-    overall_trait ENUM('정직','열정','창의','존중','기타') NOT NULL,
+    overall_trait ENUM('금융이해','위험인식','계획성','실천의지','기타') NOT NULL,
     growth_score FLOAT NOT NULL,
     total_data_json JSON NOT NULL,
     PRIMARY KEY (overall_id),
@@ -149,6 +149,7 @@ CREATE TABLE IF NOT EXISTS user_round_scores (
     round1_score  DECIMAL(6,3) NULL,
     round2_score  DECIMAL(6,3) NULL,
     round3_score  DECIMAL(6,3) NULL,
+    round4_score  DECIMAL(6,3) NULL,
     updated_at    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP
                                  ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id),

@@ -64,7 +64,7 @@
 }
 
 /* 로고 로봇 중앙 */
-.logo-robot {
+.round-indicator .logo-robot {
   display: block;
   width: 40vw;
   height: auto;
@@ -143,3 +143,11 @@
 @media (max-width: 720px) {
   .step-indicator, .current-step { width: 120px; }
 }
+.round-indicator { transform:none; margin:0; height:calc(100vh - 80px); justify-content:center; gap:16px; }
+.round-indicator h3 { font-family:"CJ ONLYONE NEW title"; font-size:42px; }
+.round-indicator .logo-robot { width:200px; margin:0; }
+.round-step-container { grid-template-columns:repeat(5,minmax(0,1fr)); width:min(1100px,90vw); margin:0 auto; }
+.round-step-container .step-indicator,.round-step-container .current-step { width:clamp(110px,13vw,180px); font-size:20px; }
+.round-step-container h4 { font-size:24px; }
+.round-indicator .explanation { margin:10px 0 0; }
+.round-start { background:#FF6E37; color:#fff; border-radius:13px; padding:14px 40px; font-family:"CJ ONLYONE NEW body"; }

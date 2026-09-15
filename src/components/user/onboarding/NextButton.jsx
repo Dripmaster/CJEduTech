@@ -4,12 +4,13 @@ import { useRoundStep } from '../../../contexts/RoundStepContext';
 
 export default function NextButton() {
   const navigate = useNavigate();
-  const {setStep}=useRoundStep();
+  const {setRound,setStep}=useRoundStep();
   const {isAdmin} = useUser();
 
   const handleClick = () => {
-    if (isAdmin){ navigate('/admin/roundIndicator');}
-    else {setStep(1);navigate('/user/roundIndicator');}
+    setRound(1);
+    setStep(1);
+    navigate(`/${isAdmin ? 'admin' : 'user'}/slide`);
   };
 
   return (

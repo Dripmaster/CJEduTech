@@ -1,3 +1,7 @@
+import badge1 from '@/assets/images/discussion/badge_1.png';
+import badge2 from '@/assets/images/discussion/badge_2.png';
+import badge3 from '@/assets/images/discussion/badge_3.png';
+import badge4 from '@/assets/images/discussion/badge_4.png';
 import { useEffect, useRef, useState } from "react";
 import { socket } from "@/api/chat";
 import ChatTimer from "./ChatTimer";
@@ -8,17 +12,12 @@ import cake1 from '@/assets/images/discussion/cake_1.png';
 import cake2 from '@/assets/images/discussion/cake_2.png';
 import cake3 from '@/assets/images/discussion/cake_3.png';
 import cake4 from '@/assets/images/discussion/cake_4.png';
-import badge1 from '@/assets/images/discussion/badge_1_large.png';
-import badge2 from '@/assets/images/discussion/badge_2_large.png';
-import badge3 from '@/assets/images/discussion/badge_3_large.png';
-import badge4 from '@/assets/images/discussion/badge_4_large.png';
 
 import { useUser } from "@/contexts/UserContext";
 import { useRoundStep } from '@/contexts/RoundStepContext';
 const CAKES = { 1: cake1, 2: cake2, 3: cake3, 4: cake4 };
-const BADGES = { 1: badge1, 2: badge2, 3: badge3, 4: badge4 };
 
-const LABELS = ["정직", "창의", "존중", "열정"];
+const LABELS = ["금융이해", "계획성", "실천의지", "위험인식"];
 
 const getMyNick = () => {
   const n = localStorage.getItem("nickname");
@@ -30,19 +29,19 @@ export default function ChatOverView(){
       const {isAdmin, setIsAdmin} = useUser();
       const { round, setRound, step, setStep,videoId,setVideoId } = useRoundStep();
   const [totals, setTotals] = useState({
-    정직: 0,
-    창의: 0,
-    존중: 0,
-    열정: 0,
+    금융이해: 0,
+    계획성: 0,
+    실천의지: 0,
+    위험인식: 0,
     totalMessages: 0,
     totalReactions: 0,
   });
 
   const [myTotals, setMyTotals] = useState({
-    정직: 0,
-    창의: 0,
-    존중: 0,
-    열정: 0,
+    금융이해: 0,
+    계획성: 0,
+    실천의지: 0,
+    위험인식: 0,
     totalMessages: 0,
     totalReactions: 0,
   });
@@ -64,10 +63,10 @@ export default function ChatOverView(){
       const nextReactionsMap = new Map();
       const nextAiLabelMap = new Map();
       const nextTotals = {
-        정직: 0,
-        창의: 0,
-        존중: 0,
-        열정: 0,
+        금융이해: 0,
+        계획성: 0,
+        실천의지: 0,
+        위험인식: 0,
         totalMessages: messages.length,
         totalReactions: 0,
       };
@@ -75,10 +74,10 @@ export default function ChatOverView(){
       const nextMyReactionsMap = new Map();
       const nextMyAiLabelMap = new Map();
       const nextMyTotals = {
-        정직: 0,
-        창의: 0,
-        존중: 0,
-        열정: 0,
+        금융이해: 0,
+        계획성: 0,
+        실천의지: 0,
+        위험인식: 0,
         totalMessages: 0,
         totalReactions: 0,
       };
@@ -231,7 +230,8 @@ export default function ChatOverView(){
       } catch {}
 
       const go = () => {
-        navigate('/user/discussionResult');
+        setStep(5);
+        navigate(isAdmin ? '/admin/discussionResult' : '/user/discussionResult');
       };
 
       // Admin은 즉시 이동, 일반 사용자는 5초 대기 후 이동
@@ -308,25 +308,25 @@ export default function ChatOverView(){
         <SubjectOverview totals={myTotals}/>
       </div>
       <div className = "disclaimer">
-        사용자 입력 내용은 서비스 결과 제공에만 이용되며, 종료 후 저장되지 않습니다.
+        토론 내용은 교육 결과와 피드백을 제공하는 데 사용됩니다.
       </div>
 
       <section className="principle-icons">
         <div className="principle-icon">
-          {renderCakes(totals['정직'], 'justice')}
-          <img className="badge-img" src={BADGES[1]} alt="정직"/>
+          {renderCakes(totals['금융이해'], 'justice')}
+          <img className="badge-img" src={badge1} alt="금융이해"/><span className="finance-axis-label">금융이해</span>
         </div>
         <div className="principle-icon">
-          {renderCakes(totals['열정'], 'passion')}
-          <img className="badge-img" src={BADGES[2]} alt="열정"/>
+          {renderCakes(totals['위험인식'], 'passion')}
+          <img className="badge-img" src={badge2} alt="위험인식"/><span className="finance-axis-label">위험인식</span>
         </div>
         <div className="principle-icon">
-          {renderCakes(totals['창의'], 'creed')}
-          <img className="badge-img" src={BADGES[3]} alt="창의"/>
+          {renderCakes(totals['계획성'], 'creed')}
+          <img className="badge-img" src={badge3} alt="계획성"/><span className="finance-axis-label">계획성</span>
         </div>
         <div className="principle-icon">
-          {renderCakes(totals['존중'], 'respect')}
-          <img className="badge-img" src={BADGES[4]} alt="존중"/>
+          {renderCakes(totals['실천의지'], 'respect')}
+          <img className="badge-img" src={badge4} alt="실천의지"/><span className="finance-axis-label">실천의지</span>
         </div>
         <div>
         </div>
