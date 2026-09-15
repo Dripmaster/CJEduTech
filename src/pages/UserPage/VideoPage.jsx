@@ -1,186 +1,47 @@
-import { useState, useRef, useEffect } from 'react';
-import PageHeader from '../../components/common/PageHeader';
-import VideoFooter from '../../components/user/video/VideoFooter';
-import { useRoundStep } from '../../contexts/RoundStepContext';
-import { videoByRound } from '../../contents/videoByRound';
-import '../../components/user/video/video.css';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useRoundStep } from '../../contexts/RoundStepContext';
+import { useUser } from '../../contexts/UserContext';
+import { getLesson } from '../../contents/financial-course.js';
+import PageHeader from '../../components/common/PageHeader';
+import '../../components/user/video/video.css';
+import '../../components/financial/course.css';
+import '../../components/admin/indicatorNextButton.css';
+import aiIcon from '../../assets/images/discussion/AI_icon.png';
 
-export default function VideoPage({ onComplete }) {
-  const { round, step, setStep, videoId, setVideoId } = useRoundStep();
-  const [videoEnded, setVideoEnded] = useState(false);
-  const [progress, setProgress] = useState(0); // 0 ~ 100 percent
-  const videoRef = useRef(null);
-  const lockSeekRef = useRef(false);
-  const lastTimeRef = useRef(0);
-  const [muted, setMuted] = useState(true);
-  const [clickCount, setClickCount] = useState(0);
-  const navigate = useNavigate();
-  const API_BASE = import.meta.env?.VITE_API_URL;
-  // 별도의 동영상 CDN/S3/CloudFront를 사용할 경우 .env에 VITE_VIDEO_BASE 를 지정하세요.
-  // 지정하지 않으면 API_BASE를 기본 프리픽스로 사용합니다.
-  const VIDEO_BASE = 'https://d32musk4jrqud8.cloudfront.net';
-  const unmuteAndPlay = () => {
-    setMuted(false);
-    const v = videoRef.current;
-    if (v) {
-      v.muted = false;
-      const p = v.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {/* autoplay policy may still block until next gesture */});
-      }
-    }
-  };
-  const playlist = videoByRound[round] || [];
-  const content = playlist[videoId];
-  const videoSrc = content?.src?.startsWith('http') ? content.src : `${VIDEO_BASE}${content?.src || ''}`;
-
+function StudentVideoGuide({ title, onNext }) {
+  const [ready, setReady] = useState(false);
   useEffect(() => {
-    setVideoEnded(false);
-    const v = videoRef.current;
-    if (!v) return;
-    v.playsInline = true;
-    const tryPlay = () => {
-      const p = v.play();
-      if (p && typeof p.catch === 'function') {
-        p.catch(() => {/* ignore autoplay block */});
-      }
-    };
-    if (v.readyState >= 2) tryPlay();
-    else v.addEventListener('loadeddata', tryPlay, { once: true });
-  }, [round, videoId]);
-
-  useEffect(() => {
-    // Chrome/iOS 정책: 사용자 제스처 이후에만 소리 재생 허용
-    const handler = () => {
-      if (muted) unmuteAndPlay();
-      window.removeEventListener('pointerdown', handler, true);
-    };
-    window.addEventListener('pointerdown', handler, true);
-    return () => window.removeEventListener('pointerdown', handler, true);
-  }, [round, videoId, muted]);
-
-  if (!content) return <div>이 라운드의 영상이 없습니다.</div>;
-  const isLast = videoId === playlist.length - 1;
-
-  return (
-    <div className='video-page'>
-      <div
-        style={{
-          position: 'absolute',
-          top: '9vh',
-          left: '5vw',
-          zIndex: 999,
-          backgroundColor: '#FF6B00',
-          padding: 8,
-          borderRadius: 4,
-        }}
-      >
-        <label htmlFor="videoSelect" style={{ color: 'white', marginRight: 8 }}>영상 선택:</label>
-        <select
-          id="videoSelect"
-          value={videoId}
-          onChange={(e) => {
-            setVideoId(Number(e.target.value));
-            localStorage.setItem("videoId",e.target.value);
-            console.log(e.target.value);
-            ;
-          }}
-        >
-          {[...Array(10)].map((_, idx) => (
-            <option key={idx} value={idx}>{idx + 1}</option>
-          ))}
-        </select>
-      </div>
-      <PageHeader title={`${content.title} (${videoId + 1} / ${playlist.length})`} />
-      <section
-        className='video-main'
-        onClick={() => {
-          setClickCount(prev => {
-            const next = prev + 1;
-            if (next >= 100) {
-              navigate('/admin/aiDiscussion');
-            }
-            return next;
-          });
-        }}
-      >
-        <div className="video-player">
-          <div className="video-progress">
-            <div
-              className="video-progress-bar"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          {!videoEnded && muted && (
-            <button
-              type="button"
-              onClick={unmuteAndPlay}
-              style={{
-                position: 'absolute', right: 12, top: 12,
-                zIndex: 3, padding: '6px 10px', borderRadius: 8,
-                border: '0', background: 'rgba(0,0,0,0.55)', color: '#fff',
-                fontSize: 12, cursor: 'pointer'
-              }}
-            >
-              🔊 소리 켜기
-            </button>
-          )}
-          <video
-            className="video-element"
-            key={`${round}-${videoId}`}
-            ref={videoRef}
-            src={videoSrc}
-            autoPlay
-            playsInline
-            muted={muted}
-            controls={true}
-            controlsList="nodownload"
-            disablePictureInPicture
-            onContextMenu={(e) => e.preventDefault()}
-            tabIndex={-1}
-            onRateChange={(e) => {
-              const v = e.currentTarget;
-              if (v.playbackRate !== 1) v.playbackRate = 1;
-            }}
-            onTimeUpdate={(e) => {
-              const v = e.currentTarget;
-              if (!lockSeekRef.current) {
-                lastTimeRef.current = v.currentTime;
-              }
-              if (v.duration) {
-                setProgress((v.currentTime / v.duration) * 100);
-              }
-            }}
-            onSeeking={(e) => {
-              const v = e.currentTarget;
-              const allowed = lastTimeRef.current;
-              if (!lockSeekRef.current && Math.abs(v.currentTime - allowed) > 0.25) {
-                lockSeekRef.current = true;
-                v.currentTime = allowed;
-                setTimeout(() => { lockSeekRef.current = false; }, 0);
-              }
-            }}
-            onEnded={() => {
-              setVideoEnded(true);
-            }}
-          />
-        </div>
-        <button
-          className='finish-button'
-          disabled={!videoEnded}
-          onClick={() => {
-            if (!videoEnded) return;
-            else {
-              navigate('/admin/aiDiscussion');
-            }
-          }}
-        >
-          {videoEnded
-            ? (isLast ? '영상 시청 종료' : '영상 시청 종료')
-            : '영상은 자동 재생됩니다. 한 번 클릭해서 음소거를 해제해 주세요.'}
-        </button>
-      </section>
+    const timer = setTimeout(() => setReady(true), 10000);
+    return () => clearTimeout(timer);
+  }, []);
+  return <div className="financial-video-indicator">
+    <PageHeader title={title}/>
+    <div className="financial-video-message">
+      <img src={aiIcon} alt="아이고라 로봇"/>
+      <p>강사의 화면으로 영상을 시청한 뒤, 본인의 화면으로 토론에 참여해 주세요.<br/>영상 속 상황에 이입하여, 본인이라면 어떻게 판단하고 행동할지 생각해 보세요.<br/>금융이해 · 위험인식 · 계획성 · 실천의지를 중심으로 시청해 주세요.</p>
     </div>
-  );
+    <div className="financial-video-footer">영상 시청 종료 후 다음으로 버튼을 눌러주세요.</div>
+    <button className="indicator-next-button" disabled={!ready} onClick={onNext} style={{ opacity: ready ? 1 : 0.5 }}>다음으로</button>
+  </div>;
+}
+export default function VideoPage() {
+  const { round, setStep } = useRoundStep();
+  const { isAdmin } = useUser();
+  const navigate = useNavigate();
+  const lesson = getLesson(round);
+  const [error, setError] = useState(false);
+  const configured = import.meta.env[`VITE_FINANCIAL_VIDEO_${round}`] || lesson.videoSrc;
+  const next = () => {setStep(4);navigate(`/${isAdmin?'admin':'user'}/aiDiscussion`);};
+  if (!isAdmin) return <StudentVideoGuide key={round} title={`${round}차시 · ${lesson.title} · 영상`} onNext={next}/>;
+  return <div className="video-page">
+    <PageHeader title={`${round}차시 · ${lesson.title} · 영상`}/>
+    <main className="video-main">
+      <div className="video-player">{configured ? <video className="video-element" src={configured} controls playsInline preload="metadata" onError={() => setError(true)}/> : <section className="finance-empty"><h2>영상 파일 준비 중</h2><p>시나리오 {round}의 영상이 아직 전달되지 않았습니다.</p></section>}</div>
+      <footer className="video-footer">
+        <p className="video-guide">{error ? '영상을 재생하지 못했습니다. 영상 주소와 파일 형식을 확인해 주세요.' : '강사의 안내에 따라 시청해 주세요.'}</p>
+        <button className="finish-button" onClick={next}>{configured ? '토론으로 이동' : '영상 없이 토론 화면 확인'}</button>
+      </footer>
+    </main>
+  </div>;
 }

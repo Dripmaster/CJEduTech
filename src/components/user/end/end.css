@@ -18,3 +18,5 @@
   font-size: 24px;
   margin: 0;  
 }
+.end-page{position:relative;background-size:contain;background-repeat:no-repeat;background-color:#f7f7f7;}
+.end-result-button{position:absolute;bottom:20px;right:28px;background:#FF6E37;color:white;border-radius:13px;padding:14px 28px;font-family:"CJ ONLYONE NEW body";}

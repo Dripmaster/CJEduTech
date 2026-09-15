@@ -9,7 +9,7 @@ export default function NextSessionButton() {
     <button
       className="next-session-button"
       onClick={() => {
-          navigate("/user/loadResult");
+          navigate("/user/end");
       }}
     >
       종료하기

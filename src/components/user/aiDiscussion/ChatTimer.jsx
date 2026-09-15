@@ -1,56 +1,15 @@
-import { useEffect, useRef, useState } from "react";
-import { socket } from "@/api/chat";
-
-const TOTAL_SECONDS_FALLBACK = 60 * 60; // 60분 (서버 미응답시 초기 표기)
-
+import { useEffect, useState } from 'react';
+import { socket } from '@/api/chat';
 export default function ChatTimer(){
-  const [remaining, setRemaining] = useState(TOTAL_SECONDS_FALLBACK);
-  const tickRef = useRef(null);
-  const syncRef = useRef(null);
-
-  // 서버에서 남은 시간 수신
-  useEffect(() => {
-    const handleTime = ({ remainingMs }) => {
-      const sec = Math.max(0, Math.floor((remainingMs || 0) / 1000));
-      setRemaining(sec);
-    };
-    socket.on('room:time', handleTime);
-    // 초기 요청 (방 id는 상황에 맞게 교체)
-    socket.emit('room:time:request', {  });
-
-    return () => {
-      socket.off('room:time', handleTime);
-    };
-  }, []);
-
-  // 1초 틱 (로컬 카운트다운)
-  useEffect(() => {
-    tickRef.current = setInterval(() => {
-      setRemaining((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(tickRef.current);
-  }, []);
-
-  // 5초마다 서버 동기화 요청
-  useEffect(() => {
-    syncRef.current = setInterval(() => {
-      socket.emit('room:time:request', {});
-    }, 5000);
-    return () => clearInterval(syncRef.current);
-  }, []);
-
-  const mm = String(Math.floor(remaining / 60)).padStart(2, '0');
-  const ss = String(remaining % 60).padStart(2, '0');
-  const progress = 1 - remaining / (TOTAL_SECONDS_FALLBACK || 1);
-
-  return (
-    <div className="overview-top">
-      <div className="timer-wrap">
-        <div className="timer-face" style={{"--p": String(progress)}}>
-          <div className="timer-total-inside">60:00</div>
-          <div className="timer-remaining">{mm}:{ss}</div>
-        </div>
-      </div>
-    </div>
-  );
+ const [time,setTime]=useState({remaining:null,total:null});
+ useEffect(()=>{
+  const sync=({remainingMs,durationMs})=>setTime(prev=>({remaining:Math.max(0,Math.floor(remainingMs/1000)),total:durationMs ? Math.floor(durationMs/1000) : prev.total}));
+  socket.on('room:time',sync);socket.emit('room:time:request',{});
+  const tick=setInterval(()=>setTime(prev=>prev.remaining==null?prev:{...prev,remaining:Math.max(0,prev.remaining-1)}),1000);
+  const poll=setInterval(()=>socket.emit('room:time:request',{}),5000);
+  return ()=>{socket.off('room:time',sync);clearInterval(tick);clearInterval(poll);};
+ },[]);
+ const format=n=>n==null?'--:--':`${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+ const progress=time.total ? Math.max(0,Math.min(1,1-time.remaining/time.total)) : 0;
+ return <div className="overview-top"><div className="timer-wrap"><div className="timer-face" style={{'--p':String(progress)}}><div className="timer-total-inside">{format(time.total)}</div><div className="timer-remaining">{format(time.remaining)}</div></div></div></div>;
 }

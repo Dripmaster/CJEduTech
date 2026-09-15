@@ -6,7 +6,7 @@ const UserContext = createContext();
 export function UserProvider({ children }) {
   const [nickname, setNickname] = useState('');
   const [avatarUrl, setAvatarUrl] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('isAdmin') === 'true');
 
   useEffect(() => {
     const storedNickname = localStorage.getItem('nickname');
@@ -14,7 +14,7 @@ export function UserProvider({ children }) {
     const storedIsAdmin = localStorage.getItem('isAdmin');
     if (storedNickname) setNickname(storedNickname);
     if (storedAvatarUrl) setAvatarUrl(storedAvatarUrl);
-    if (storedIsAdmin) setIsAdmin(true);
+    if (storedIsAdmin === 'true') setIsAdmin(true);
     if (isAdmin) setNickname('admin');
   }, []);
 

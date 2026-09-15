@@ -32,15 +32,15 @@ export function computeScore({ correct, total }) {
  * 라운드 스코어 저장(업서트)
  * @param {Object} params
  * @param {string} params.user_id  (필수) 사용자 ID
- * @param {1|2|3|string|number} params.round  라운드 번호(1~3)
+ * @param {1|2|3|4|string|number} params.round  라운드 번호(1~4)
  * @param {number} params.correct  정답 수
  * @param {number} params.total    전체 문항 수
  * @returns {Promise<{ok:true, round:number, score:number}>}
  */
 export async function saveRoundScore({ user_id, round, correct, total }) {
   const r = Number(round);
-  if (![1,2,3].includes(r)) {
-    const err = new Error('round must be 1, 2, or 3');
+  if (![1,2,3,4].includes(r)) {
+    const err = new Error('round must be 1, 2, 3, or 4');
     err.status = 400; throw err;
   }
 

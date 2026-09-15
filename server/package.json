@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test ../tests/quiz-storage.test.mjs",
     "dev": "nodemon --ignore \"data/chat_archives\" --ignore \"data/chat_archives/**\" index.js",
     "start": "node index.js"
   },
@@ -20,7 +20,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.14.3",
-    "zod": "^4.0.17"
+    "zod": "^4.0.17",
+    "socket.io": "^4.7.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"
@@ -31,6 +32,6 @@
       "data/chat_archives/*.json",
       "data/chat_archives/*.log"
     ]
-  }
-  
+  },
+  "type": "module"
 }

@@ -1,5 +1,7 @@
-import PageHeader from "../../components/common/PageHeader";
-import '@/components/admin/session/adminSession.css'
+import robot from '../../assets/images/common/logoRobot.png';
+import logo from '../../assets/images/common/logo.png';
+import '../../components/admin/session/adminSession.css';
+import '../../components/financial/course.css'
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from "../../contexts/UserContext";
@@ -7,7 +9,7 @@ import { useUser } from "../../contexts/UserContext";
 export default function UserSessionPage(){
     const navigate = useNavigate();
     const [progress, setProgress] = useState(0);
-    const {isAdmin, setIsAdmin} = useUser();
+    const {setIsAdmin} = useUser();
 
     useEffect(() => {
         setIsAdmin(false);
@@ -30,7 +32,7 @@ export default function UserSessionPage(){
     }, []);
 
     return (
-        <div className="admin-session-page">
+        <div className="financial-session"><img className="session-robot" src={robot} alt="아이고라 로봇"/><img className="session-logo" src={logo} alt="Aigora"/>
             <div className="progress-bar-container">
                 <div className="progress-bar-fill" style={{ width: `${progress}%` }} />
             </div>

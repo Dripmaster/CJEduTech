@@ -9,7 +9,7 @@ export const quizApi = {
   /** 내(로그인 유저) 점수 조회 */
   getMyScores: () => http.get('/api/quiz/scores/me'),
 
-  /** 라운드 점수 저장: round(1~3), correct(정답수), total(총 문항수) */
+  /** 라운드 점수 저장: round(1~4), correct(정답수), total(총 문항수) */
   submitRoundScore: ({ round, correct, total }) =>
     http.post('/api/quiz/scores', { round, correct, total }),
 };

@@ -45,10 +45,10 @@ async function ensureChartJS(){
 import heroSheep from "@/assets/images/discussion/1_sheep.png";
 import donutPlaceholder from "@/assets/images/discussion/donut_placeholder.png";
 import myAvatar from "@/assets/images/avatar/avatar2.png";
-import badgeJustice from "@/assets/images/discussion/badge_1.png";
-import badgePassion from "@/assets/images/discussion/badge_2.png";
-import badgeCreativity from "@/assets/images/discussion/badge_3.png";
-import badgeRespect from "@/assets/images/discussion/badge_4.png";
+import badgeJustice from '@/assets/images/discussion/badge_1.png';
+import badgePassion from '@/assets/images/discussion/badge_2.png';
+import badgeCreativity from '@/assets/images/discussion/badge_3.png';
+import badgeRespect from '@/assets/images/discussion/badge_4.png';
 import user1Avatar from "@/assets/images/avatar/avatar1.png";
 import aiIcon from "@/assets/images/discussion/AI_icon.png";
 
@@ -64,53 +64,6 @@ import avatar9 from "@/assets/images/avatar/avatar9.png";
 import avatar10 from "@/assets/images/avatar/avatar10.png";
 import avatar11 from "@/assets/images/avatar/avatar11.png";
 import avatar12 from "@/assets/images/avatar/avatar12.png";
-
-function buildMockRoomResult(nickname = '나'){
-  const createdAt = new Date().toISOString();
-  const perUser = {
-    [nickname]: {
-      totalMessages: 18,
-      totalReactions: 27,
-      labels: { '정직': 8, '열정': 5, '창의': 3, '존중': 2 },
-      topReacted: { text: '가장 공감을 많이 받은 발언입니다. 데이터 기반으로 의사결정하면 설득력이 높아집니다.', reactionsCount: 12 }
-    },
-    '동료A': { totalMessages: 14, totalReactions: 21, labels: { '정직': 4, '열정': 6, '창의': 2, '존중': 2 }, topReacted: { text: '고객 관점을 더 녹이면 좋겠어요.', reactionsCount: 9 } },
-    '동료B': { totalMessages: 9,  totalReactions: 13, labels: { '정직': 2, '열정': 2, '창의': 4, '존중': 1 }, topReacted: { text: '실험을 작게 자주 해보죠.', reactionsCount: 6 } },
-    '동료C': { totalMessages: 7,  totalReactions: 8,  labels: { '정직': 1, '열정': 3, '창의': 1, '존중': 2 }, topReacted: { text: '일정을 먼저 확정합시다.', reactionsCount: 4 } },
-  };
-
-  const ranking = [
-    { nickname, rank: 1, score: 96, totalMessages: perUser[nickname].totalMessages, totalReactions: perUser[nickname].totalReactions },
-    { nickname: '동료A', rank: 2, score: 88, totalMessages: perUser['동료A'].totalMessages, totalReactions: perUser['동료A'].totalReactions },
-    { nickname: '동료B', rank: 3, score: 80, totalMessages: perUser['동료B'].totalMessages, totalReactions: perUser['동료B'].totalReactions },
-    { nickname: '동료C', rank: 4, score: 72, totalMessages: perUser['동료C'].totalMessages, totalReactions: perUser['동료C'].totalReactions },
-  ];
-
-  // 각 인재상에 한 명씩 배치 (정직→나, 열정→동료A, 창의→동료B, 존중→동료C)
-  const groups = {
-    '정직': [{ nickname, totalPersonaLabels: perUser[nickname].labels['정직'], topReacted: perUser[nickname].topReacted }],
-    '열정': [{ nickname: '동료A', totalPersonaLabels: perUser['동료A'].labels['열정'], topReacted: perUser['동료A'].topReacted }],
-    '창의': [{ nickname: '동료B', totalPersonaLabels: perUser['동료B'].labels['창의'], topReacted: perUser['동료B'].topReacted }],
-    '존중': [{ nickname: '동료C', totalPersonaLabels: perUser['동료C'].labels['존중'], topReacted: perUser['동료C'].topReacted }],
-  };
-
-  return { perUser, ranking, createdAt, groups };
-}
-
-function buildMockMyResult(nickname = '나', room){
-  const u = room.perUser[nickname];
-  const me = room.ranking.find(r => r.nickname === nickname) || { rank: 1, score: 96 };
-  return {
-    roomId: 'mock-room',
-    rank: me.rank,
-    score: me.score,
-    totalMessages: u.totalMessages,
-    totalReactions: u.totalReactions,
-    labels: u.labels,
-    topReacted: u.topReacted,
-    createdAt: room.createdAt,
-  };
-}
 
 export default function DiscussionResultMain() {
     const { round, setRound, step, setStep,videoId,setVideoId } = useRoundStep();
@@ -230,7 +183,7 @@ export default function DiscussionResultMain() {
           }
         } catch {}
 
-        if (myOutcome.status === 'fulfilled' && myOutcome.value) {
+        if (myOutcome.status === 'fulfilled' && myOutcome.value?.roomId === rid) {
           setMyResult(myOutcome.value);
           console.log("[DiscussionResultMain] myResult", myOutcome.value);
         } else {
@@ -250,16 +203,10 @@ export default function DiscussionResultMain() {
           }
         }
       } catch (e) {
-        // Fallback to mock data when API fails
-        const nickSafe = nick || '나';
-        const mockRoom = buildMockRoomResult(nickSafe);
-        const mockMe = buildMockMyResult(nickSafe, mockRoom);
-        setRoomResult(mockRoom);
-        setMyResult(mockMe);
-        console.log("[DiscussionResultMain] mockRoom", mockRoom);
-        console.log("[DiscussionResultMain] mockMe", mockMe);
-        setOverallSummary('토론 전반에 걸쳐 활발한 참여가 이루어졌습니다. 특히 정직과 열정 관련 메시지가 두드러졌으며, 팀 내 의사결정에 긍정적 영향을 주었습니다.');
-        setError('');
+        setRoomResult(null);
+        setMyResult(null);
+        setOverallSummary('');
+        setError('차시 결과를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
         setTopicLoading(false);
       } finally {
         setLoading(false);
@@ -286,9 +233,9 @@ export default function DiscussionResultMain() {
   }, [roomResult]);
 
   const myLabelEntries = useMemo(() => {
-    const L = myResult?.labels || { "정직":0, "열정":0, "창의":0, "존중":0 };
+    const L = myResult?.labels || { "금융이해":0, "위험인식":0, "계획성":0, "실천의지":0 };
     const sum = Object.values(L).reduce((a,b)=>a+(b||0),0) || 1;
-    const entries = ["정직","열정","창의","존중"].map(k => ({ key:k, val: Number(L[k]||0), pct: Math.round((Number(L[k]||0)/sum)*100) }));
+    const entries = ["금융이해","위험인식","계획성","실천의지"].map(k => ({ key:k, val: Number(L[k]||0), pct: Math.round((Number(L[k]||0)/sum)*100) }));
     return { entries, sum };
   }, [myResult]);
 
@@ -303,7 +250,7 @@ export default function DiscussionResultMain() {
       const Chart = await ensureChartJS();
       if (!Chart || !alive) return;
 
-      const labels = ['정직','열정','창의','존중'];
+      const labels = ['금융이해','위험인식','계획성','실천의지'];
       const raw = labels.map(k => Number(myResult?.labels?.[k] || 0));
       for (let i = 0; i < raw.length; i++) raw[i] = Math.max(0, raw[i] || 0);
       const total = raw.reduce((a,b)=>a+b,0);
@@ -335,12 +282,12 @@ export default function DiscussionResultMain() {
         const SIZE_BY_RANK = [156, 122, 122, 76];
         const badgeSizes = vals.map((_, i) => SIZE_BY_RANK[rankByIndex[i]] || 76);
 
-        // Badge images (정직/열정/창의/존중)
+        // Badge images (금융이해/위험인식/계획성/실천의지)
         const badgeSources = {
-          '정직': badgeJustice,
-          '열정': badgePassion,
-          '창의': badgeCreativity,
-          '존중': badgeRespect,
+          '금융이해': badgeJustice,
+          '위험인식': badgePassion,
+          '계획성': badgeCreativity,
+          '실천의지': badgeRespect,
         };
         const badgeImages = {};
         Object.entries(badgeSources).forEach(([k, src]) => {
@@ -552,11 +499,11 @@ function koreanOrdinal(n){
   }
 
   if (error && !roomResult) {
-    // 이 경우는 모의 데이터까지 생성되지 못했을 때만
+    // 조회 실패를 실제 결과와 구분한다.
     return (
       <div className="discussion-result-main" style={{ padding:"40px" }}>
         <p style={{ color:'#c00', fontWeight:800 }}>결과를 불러오지 못했습니다.</p>
-        <pre style={{ background:'#fff', padding:'12px', borderRadius:8, border:'1px solid #eee' }}>{String(error || 'no_data')}</pre>
+        <pre style={{ background:'#fff', padding:'12px', borderRadius:8, border:'1px solid #eee' }}>{String(error || 'no_data')}</pre><button onClick={() => window.location.reload()}>다시 불러오기</button><NextSessionButton/>
       </div>
     );
   }
@@ -570,8 +517,8 @@ function koreanOrdinal(n){
           <div className="dr-hero-copy">
             <p className="dr-hero-headline">
               멋진데요? 열띤 토론 덕에
-뚜레주르의 ‘겹겹이초코퐁당’이
-수레만큼 가득 모였어요.
+우리의 생각이 케이크처럼
+차곡차곡 쌓였어요.
             </p>
           <div className="dr-hero-visual">
             {/* TODO: 케이크/보트 모형 이미지 교체 */}
@@ -650,13 +597,13 @@ function koreanOrdinal(n){
 </div>
             </div>
 
-            {/* 2: 인재상 분포 */}
+            {/* 2: 발언 역량 분포 */}
             <div className="dr-distribution">
               <div className="dr-top-quote-head">
-                <span>인재상 분포</span>
+                <span>발언 역량 분포</span>
               </div>
               <div className="dr-donut-wrap">
-                <canvas ref={donutRef} className="dr-donut-canvas" aria-label="인재상 분포 차트"></canvas>
+                <canvas ref={donutRef} className="dr-donut-canvas" aria-label="발언 역량 분포 차트"></canvas>
               </div>
             </div>
 
@@ -670,10 +617,10 @@ function koreanOrdinal(n){
       <span className="result-summary-item ch"><i className="icon"/>+{myResult?.totalMessages || 0}건</span>
     </div>
                       <div className="result-category-summary-box">
-      <span className="result-category-summary-item j"><i className="icon"/>+{myResult?.labels["정직"] || 0}건</span>
-      <span className="result-category-summary-item p"><i className="icon"/>+{myResult?.labels["열정"] || 0}건</span>
-      <span className="result-category-summary-item c"><i className="icon"/>+{myResult?.labels["창의"] || 0}건</span>
-      <span className="result-category-summary-item r"><i className="icon"/>+{myResult?.labels["존중"] || 0}건</span>
+      <span className="result-category-summary-item j"><i className="icon"/>+{myResult?.labels["금융이해"] || 0}건</span>
+      <span className="result-category-summary-item p"><i className="icon"/>+{myResult?.labels["위험인식"] || 0}건</span>
+      <span className="result-category-summary-item c"><i className="icon"/>+{myResult?.labels["계획성"] || 0}건</span>
+      <span className="result-category-summary-item r"><i className="icon"/>+{myResult?.labels["실천의지"] || 0}건</span>
     </div>
             </div>
 
@@ -720,10 +667,10 @@ function rankClass(idx){
   return '';
 }
 function badgeKey(k){
-  // 정직/열정/창의/존중 → justice/passion/creativity/respect (파일명 키 예시)
-  if (k === '정직') return 'justice';
-  if (k === '열정') return 'passion';
-  if (k === '창의') return 'creativity';
-  if (k === '존중') return 'respect';
+  // 금융이해/위험인식/계획성/실천의지 → justice/passion/creativity/respect (파일명 키 예시)
+  if (k === '금융이해') return 'justice';
+  if (k === '위험인식') return 'passion';
+  if (k === '계획성') return 'creativity';
+  if (k === '실천의지') return 'respect';
   return 'badge';
 }

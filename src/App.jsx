@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';  
 import { useEffect, useMemo, useState, useRef } from "react";
-import { RoundStepProvider } from './contexts/RoundStepContext.jsx';
+import { RoundStepProvider, useRoundStep } from './contexts/RoundStepContext.jsx';
+import QuizSync from './components/financial/QuizSync.jsx';
 
 import LoginPage from './pages/UserPage/LoginPage.jsx';
 import QuizPage from './pages/UserPage/QuizPage.jsx';
-import QuizResultPage from './pages/UserPage/QuizResultPage.jsx';
 import AIDiscussionPage from './pages/UserPage/AIDiscussionPage.jsx';
 import DiscussionResultPage from './pages/UserPage/DiscussionResultPage.jsx';
 import SelectAvatarPage from './pages/UserPage/SelectAvatarPage.jsx';
@@ -17,22 +17,13 @@ import OnBoardingPage from './pages/UserPage/OnBoardingPage.jsx';
 import SlideRoute from './routes/SlideRoute.jsx';
 import FinalResultPage from './pages/UserPage/FinalResultPage.jsx';
 import LoadResultPage from './pages/UserPage/LoadResultPage.jsx';
-import DonorsOnboardingPage from './pages/UserPage/DonorsOnboardingPage.jsx';
 
 import AdminSessionPage from './pages/AdminPage/AdminSessionPage.jsx';
-import GamePage from './pages/UserPage/GamePage.jsx';
-import AfterSlidePage from './pages/UserPage/AfterSlidePage.jsx';
 
 
 import AdminRoundIndicatorPage from './pages/AdminPage/AdminRoundIndicatorPage.jsx';
 import AdminAIDiscussionPage from './pages/AdminPage/AdminAIDiscussionPage.jsx';
 import AdminDiscussionResultPage from './pages/AdminPage/AdminDiscussionResultPage.jsx';
-import AdminGamePage from './pages/AdminPage/AdminGamePage.jsx';
-import SlideIndicatorPage from './pages/AdminPage/SlideIndicatorPage.jsx';
-import QuizIndicatorPage from './pages/AdminPage/QuizIndicatorPage.jsx';
-import GameIndicatorPage from './pages/AdminPage/GameIndicatorPage.jsx';
-import GameIndicatorPage2 from './pages/AdminPage/GameIndicatorPage2.jsx';
-import VideoIndicatorPage from './pages/AdminPage/VideoIndicatorPage.jsx';
 import UserSessionPage from './pages/UserPage/UserSessionPage.jsx';
 
 function RoundStepLayout() {
@@ -41,6 +32,11 @@ function RoundStepLayout() {
       <Outlet />
     </RoundStepProvider>
   );
+}
+
+function QuizRoute() {
+  const {round} = useRoundStep();
+  return <QuizPage key={round} />;
 }
 
 function App() {
@@ -58,20 +54,18 @@ function App() {
     <RoundStepProvider>
     <UserProvider> {/* 전역 사용자 상태 적용 */}
       <BrowserRouter>
+        <QuizSync>
         <Routes>
           <Route path="/" element={<UserSessionPage />} />
 
           <Route path="/user/login" element={<LoginPage/>}/>
-          <Route path="/user/quizResult" element={<QuizResultPage />} />{/* 미사용 */}
 
           <Route path="/user/selectAvatar" element={<SelectAvatarPage />} />{/* 수강자 */}
           <Route path="/user/onboarding" element={<OnBoardingPage/>} />
-          <Route path="/user/slideIndicator" element={<SlideIndicatorPage/>}/>
-          <Route path="/user/quizIndicator" element={<QuizIndicatorPage/>}/>
-          <Route path="/user/quiz" element={<QuizPage />} />{/* 수강자 */}
-          <Route path="/user/gameIndicator" element={<GameIndicatorPage/>}/>
-          <Route path="/user/game" element={<GamePage/>}/>{/* 수강자 */}
-          <Route path="/user/videoIndicator" element={<VideoIndicatorPage/>}/>
+          <Route path="/user/slide" element={<SlideRoute />} />
+          <Route path="/user/video" element={<VideoPage />} />
+          <Route path="/admin/quiz" element={<QuizRoute />} />
+          <Route path="/user/quiz" element={<QuizRoute />} />{/* 수강자 */}
           <Route path="/user/aiDiscussion" element={<AIDiscussionPage />} />{/* 수강자 */}
           <Route path="/user/discussionResult" element={<DiscussionResultPage />} />{/* 수강자 */}
           <Route path="/user/finalResult" element={<FinalResultPage />} />{/* 수강자 */}
@@ -81,16 +75,8 @@ function App() {
 
           <Route path="/admin/session" element={<AdminSessionPage />} />{/* 강의자용 로그인 */}
           <Route path="/admin/onboarding" element={<OnBoardingPage/>} /> {/* 강의자 */}
-          <Route path="/admin/donorsOnboarding" element={<DonorsOnboardingPage/>} />{/* 강의자 */}
-          <Route path="/admin/slideIndicator" element={<SlideIndicatorPage/>}/>
           <Route path="/admin/slide" element={<SlideRoute />} />{/* 강의자 */}
-          <Route path="/admin/afterSlide" element={<AfterSlidePage/>}/>{/* 강의자 */}
-          <Route path="/admin/quizIndicator" element={<QuizIndicatorPage/>}/>
-          <Route path="/admin/gameIndicator" element={<GameIndicatorPage/>}/>
-          <Route path="/admin/gameIndicator2" element={<GameIndicatorPage2/>}/>
-          <Route path="/admin/game" element={<AdminGamePage/>}/>{/* 강의자용 가이드(신규) */}
           <Route path="/admin/roundIndicator" element={<AdminRoundIndicatorPage />} />{/* 강의자용 가이드 (신규?) */}
-          <Route path="/admin/videoIndicator" element={<VideoIndicatorPage/>}/>
           <Route path="/admin/video" element={<VideoPage />} />{/* 강의자 */}
           <Route path="/admin/aiDiscussion" element={<AdminAIDiscussionPage />} />{/* 강의자용 신규 */}
           <Route path="/admin/discussionResult" element={<AdminDiscussionResultPage />} />{/* 강의자용 신규 */}
@@ -100,6 +86,7 @@ function App() {
 
           <Route path="/test" element={<TestApi />} />
         </Routes>
+        </QuizSync>
       </BrowserRouter>
     </UserProvider>
     </RoundStepProvider>

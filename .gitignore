@@ -30,3 +30,8 @@ dist/
 # Chat archives (ignore runtime-generated files)
 server/data/chat_archives/*
 general-latest.json
+
+# Financial education local build
+dist-financial/
+.playwright-cli/
+output/

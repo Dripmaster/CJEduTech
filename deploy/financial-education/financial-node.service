@@ -1,0 +1,21 @@
+[Unit]
+Description=Financial education node API (2026-09-20)
+After=network.target mysql.service
+[Service]
+Type=simple
+User=financial-education
+Group=financial-education
+WorkingDirectory=/srv/financial-education/web/server
+EnvironmentFile=/etc/financial-education/node.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/financial-education/data
+[Install]
+WantedBy=multi-user.target

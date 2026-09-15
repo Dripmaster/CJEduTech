@@ -1,4 +1,5 @@
 import express from "express";
+import process from 'node:process';
 import cors from "cors";
 import dotenv from "dotenv";
 import mysql from "mysql2/promise";
@@ -11,11 +12,12 @@ import chatRouter from './routes/socket.routes.js';
 import { errorHandler } from './middlewares/error.js';
 import { randomUUID } from "crypto";
 import { initChatSocket } from './services/socket.service.js';
+import { initCourseControl } from './services/course-control.service.js';
 
 // ENV: AI_SERVER_BASE (e.g., http://localhost:8000) used by services/review.service.js
 
 dotenv.config();
-const allowed = [
+const allowed = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',').map(value => value.trim()).filter(Boolean) : [
   'https://aigora.kr',
   'https://www.aigora.kr',
   'https://api.aigora.kr',
@@ -82,6 +84,7 @@ app.use('/api/game', gameRoutes);
 
 // Initialize chat socket namespace/handlers from service
 initChatSocket(io);
+initCourseControl(io);
 
 //퀴즈 api
 import quizRoutes from './routes/quiz.routes.js';
@@ -91,4 +94,4 @@ app.use('/api/quiz', quizRoutes);
 app.use(errorHandler);
 
 const PORT = Number(process.env.PORT || 3000);
-httpServer.listen(PORT, () => console.log(`API + Socket.IO UP http://localhost:${PORT}`));
+httpServer.listen(PORT, process.env.HOST || '127.0.0.1', () => console.log(`API + Socket.IO UP http://localhost:${PORT}`));

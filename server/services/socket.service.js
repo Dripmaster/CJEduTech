@@ -1,5 +1,6 @@
 // server/services/socket.service.js
 import { randomUUID } from "crypto";
+import process from 'node:process';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -7,9 +8,11 @@ import path from 'path';
 const MAX_RECENT = 100;
 /** @type {Map<string, Array<{id:string, roomId:string, nickname:string, text:string, createdAt:string}>>} */
 const recentByRoom = new Map();
+// Complete lesson record for results; recentByRoom only limits reconnect payloads.
+const messagesByRoom = new Map();
 /** @type {Map<string, Set<string>>} messageId -> Set<nickname> */
 const reactionsByMsg = new Map();
-/** @type {Map<string, { label?: "열정"|"정직"|"창의"|"존중", labels?: string[], scores?: Record<string, number>, summary?: string, method?: string, confidence?: number, score?: number, state: "PENDING"|"DONE"|"ERROR" }>} */
+/** @type {Map<string, { label?: "위험인식"|"금융이해"|"계획성"|"실천의지", labels?: string[], scores?: Record<string, number>, summary?: string, method?: string, confidence?: number, score?: number, state: "PENDING"|"DONE"|"ERROR" }>} */
 const aiByMsg = new Map();
 
 /** @type {Map<string, { createdAt:number, roomId:string, perUser: Record<string, { nickname:string, totalMessages:number, totalReactions:number, labels: Record<string, number>, topReacted?: { messageId:string, text:string, reactionsCount:number, createdAt:string } }>, ranking: Array<{ nickname:string, rank:number, score:number, totalMessages:number, totalReactions:number, labels: Record<string, number> }> }>} */
@@ -29,11 +32,11 @@ function decomposeRoomId(composed){
 }
 
 // ===== Config / constants =====
-const ALLOWED_LABELS = new Set(["열정","정직","창의","존중"]);
+const ALLOWED_LABELS = new Set(["위험인식","금융이해","계획성","실천의지"]);
 const MIN_AI_SCORE = Number(process.env.AI_MIN_SCORE || 0.6);
 // 로컬 테스트용 엔드포인트 (환경변수 사용 시 교체)
 // const AI_ENDPOINT = process.env.AI_ENDPOINT;
-const AI_ENDPOINT = "http://localhost:8000";
+const AI_ENDPOINT = process.env.AI_SERVER_BASE || "http://127.0.0.1:8000";
 
 const AI_API_KEY = process.env.AI_API_KEY;
 // Prebuilt topic questions directory (per round)
@@ -78,18 +81,7 @@ async function loadRoundQuestions(baseId, round){
 const DISCUSSION_MASTER_FILE = process.env.DISCUSSION_MASTER_FILE || path.join(DISCUSSION_QUESTIONS_DIR, 'default.json');
 
 // Default mapping for numeric videoId (0~9) → keys in content.json
-const DEFAULT_VIDEO_INDEX = [
-  'video_tous_1',
-  'video_tous_3',
-  'video_tous_5',
-  'video_vips_mgr_1',
-  'video_vips_mgr_4',
-  'video_vips_mgr_5',
-  'video_vips_cook_2',
-  'video_vips_cook_3',
-  'video_vips_cook_4',
-  'video_vips_cook_5',
-];
+const DEFAULT_VIDEO_INDEX = ['financial_1','financial_2','financial_3','financial_4'];
 
 // Resolver: convert videoId (number/string) to content.json key
 async function resolveVideoKey(videoId){
@@ -144,7 +136,7 @@ async function writeJSON(file, obj){ await ensureDir(path.dirname(file)); await 
 async function readJSON(file){ const buf = await fs.readFile(file, 'utf-8'); return JSON.parse(buf); }
 
 // ===== Room lifetime =====
-const ROOM_MAX_AGE_MS = Number(process.env.ROOM_MAX_AGE_MS || 10 * 1000); // 데모용  60초
+const ROOM_MAX_AGE_MS = Number(process.env.ROOM_MAX_AGE_MS || 20 * 60 * 1000); // 리허설 기본값, 실제 시간표는 환경변수로 지정
 
 // ===== Test Bot (per-room, optional, multi-bot) =====
 const BOT_ENABLED = false;
@@ -165,9 +157,9 @@ const BOT_PERSONAS = [
   { name: '가을', tone: '사례중심' },
   { name: '태윤', tone: '비유' },
   { name: '나래', tone: '창의적' },
-  { name: '유진', tone: '정직' },
-  { name: '주원', tone: '열정' },
-  { name: '하늘', tone: '존중' },
+  { name: '유진', tone: '금융이해' },
+  { name: '주원', tone: '위험인식' },
+  { name: '하늘', tone: '실천의지' },
   { name: '서준', tone: '논리' },
   { name: '수아', tone: '문제정의' },
   { name: '예준', tone: '데이터' },
@@ -313,6 +305,9 @@ function setNextTopic(io, roomId, dir = +1,default_topic = false){
 
 // ===== Helpers =====
 function pushRecent(roomId, msg) {
+  const history = messagesByRoom.get(roomId) ?? [];
+  history.push(msg);
+  messagesByRoom.set(roomId, history);
   const arr = recentByRoom.get(roomId) ?? [];
   arr.push(msg);
   if (arr.length > MAX_RECENT) arr.shift();
@@ -327,7 +322,7 @@ function getReactionSet(messageId) {
   return set;
 }
 function findRoomIdByMessageId(messageId) {
-  for (const [roomId, arr] of recentByRoom.entries()) {
+  for (const [roomId, arr] of messagesByRoom.entries()) {
     if (arr.some(m => m.id === messageId)) return roomId;
   }
   return null;
@@ -340,7 +335,7 @@ function calcUserScore(u) {
 }
 
 function serializeMessagesForArchive(roomId){
-  const arr = recentByRoom.get(roomId) || [];
+  const arr = messagesByRoom.get(roomId) || [];
   return arr.map(m => {
     const set = reactionsByMsg.get(m.id) || new Set();
     const ai = aiByMsg.get(m.id) || {};
@@ -393,12 +388,13 @@ function cleanupRoomIfEmpty(io, roomId) {
   roomStates.delete(roomId);
 
   // purge in-memory messages and per-message maps
-  const msgs = recentByRoom.get(roomId) || [];
+  const msgs = messagesByRoom.get(roomId) || [];
   for (const m of msgs) {
     reactionsByMsg.delete(m.id);
     aiByMsg.delete(m.id);
   }
   recentByRoom.delete(roomId);
+  messagesByRoom.delete(roomId);
 
   return true;
 }
@@ -426,10 +422,10 @@ async function expireRoom(io, roomId) {
   }
 
   // 결과 집계 (per user)
-  const msgs = recentByRoom.get(roomId) || [];
+  const msgs = messagesByRoom.get(roomId) || [];
   const avatarIdByNick = {}; // ✅ 닉네임→아바타 맵
   // Track, per user, the most-liked message for each persona label
-  const perUserTopByLabel = {}; // nickname -> { 정직|열정|창의|존중: { messageId, text, reactionsCount, createdAt } }
+  const perUserTopByLabel = {}; // nickname -> { 금융이해|위험인식|계획성|실천의지: { messageId, text, reactionsCount, createdAt } }
   const perUser = {};
   for (const m of msgs) {
     const nick = m.nickname || '익명';
@@ -440,10 +436,10 @@ async function expireRoom(io, roomId) {
       nickname: nick,
       totalMessages: 0,
       totalReactions: 0,
-      labels: { 정직:0, 창의:0, 존중:0, 열정:0 },
+      labels: { 금융이해:0, 계획성:0, 실천의지:0, 위험인식:0 },
       topReacted: undefined,
     };
-    if (!perUserTopByLabel[nick]) perUserTopByLabel[nick] = { 정직:null, 열정:null, 창의:null, 존중:null };
+    if (!perUserTopByLabel[nick]) perUserTopByLabel[nick] = { 금융이해:null, 위험인식:null, 계획성:null, 실천의지:null };
     perUser[nick].totalMessages += 1;
     const set = reactionsByMsg.get(m.id);
     const rc = set ? set.size : 0;
@@ -495,8 +491,8 @@ async function expireRoom(io, roomId) {
   // === Persona grouping (server-provided) ===
   const groups =  undefined;
   /*
-  const groups = { 정직: [], 열정: [], 창의: [], 존중: [] };
-  const ORDER = ['정직','열정','창의','존중'];
+  const groups = { 금융이해: [], 위험인식: [], 계획성: [], 실천의지: [] };
+  const ORDER = ['금융이해','위험인식','계획성','실천의지'];
   for (const [nick, u] of Object.entries(perUser)) {
     const counts = u.labels || {};
     let best = null; let bestCnt = -1;
@@ -615,7 +611,7 @@ async function expireRoom(io, roomId) {
 async function buildAndBroadcastSummaries(io, roomId){
   // Reuse existing in-memory data
   const stS = getRoomState(roomId);
-  const msgs = recentByRoom.get(roomId) || [];
+  const msgs = messagesByRoom.get(roomId) || [];
   const perUser = (resultsByRoom.get(roomId) || {}).perUser || {};
 
   // --- Topic-wise representative statements (moved from expireRoom) ---
@@ -1057,13 +1053,15 @@ async function classifyAndBroadcast(io, msg) {
         text: msg.text,
         nickname: msg.nickname,
         roomId: msg.roomId,
-        user_id:"test_id"
+        user_id:msg.nickname,
+        context: { lesson_id: decomposeRoomId(msg.roomId).round, discussion_topic: roomStates.get(msg.roomId)?.topic || "" }
       })
     });
     if (!res.ok) throw new Error(`AI classify http ${res.status}`);
     const data = await res.json();
+    if (data.evaluation_status === "unavailable") throw new Error("AI classification unavailable");
     // 기대 형식:
-    // { cj_values: {정직:66,...}, primary_trait: ["창의"], summary:"...", method:"...", confidence:0.12 ... }
+    // { cj_values: {금융이해:66,...}, primary_trait: ["계획성"], summary:"...", method:"...", confidence:0.12 ... }
 
     const rawValues = data?.cj_values && typeof data.cj_values === 'object' ? data.cj_values : {};
     const primary = Array.isArray(data?.primary_trait)
@@ -1073,8 +1071,7 @@ async function classifyAndBroadcast(io, msg) {
     const norm = (v) => {
       const n = Number(v);
       if (Number.isNaN(n)) return undefined;
-      if (n > 1) return Math.max(0, Math.min(1, n / 100));
-      return Math.max(0, Math.min(1, n));
+      return Math.max(0, Math.min(1, n / 100));
     };
 
     // 1) primary_trait 우선 채택
@@ -1135,7 +1132,7 @@ async function classifyAndBroadcast(io, msg) {
 // ===== Public API =====
 // === Snapshot helper for AI overall summary ===
 export function getRoomSnapshot(roomId) {
-  const messages = Array.isArray(recentByRoom.get(roomId)) ? recentByRoom.get(roomId) : [];
+  const messages = messagesByRoom.get(roomId) || [];
   const st = roomStates.get(roomId) || {};
   const topic = st.topic || "";
   // duration 분 단위 추정
@@ -1157,7 +1154,7 @@ export function initChatSocket(io) {
 
     socket.on("room:join", async ({ roomId, round, videoId, isAdmin }) => {
       console.log(isAdmin);
-      if (!roomId) return;
+      if (!roomId || ![1,2,3,4].includes(Number(round))) return;
 
       const composed = composeRoomId(roomId, round);
       let prevRoom = joinedRoomId;
@@ -1168,6 +1165,7 @@ export function initChatSocket(io) {
 
       // ensure room state exists & save current video id (do not override once set)
       const stForJoin = getRoomState(composed);
+      stForJoin.roundNumber = Number(round);
       if (isAdmin) {
         const incomingHas = (videoId !== undefined && videoId !== null);
         const alreadyHas = (typeof stForJoin.videoId !== 'undefined');
@@ -1195,6 +1193,8 @@ export function initChatSocket(io) {
             if (roomMatch === composed) aiByMsg.delete(mid);
           }
 
+          messagesByRoom.delete(composed);
+
           // schedule first topic broadcast ~10s later
           const now = Date.now();
           stForJoin.topicNextAt = now + 10000; // 10s
@@ -1221,6 +1221,7 @@ export function initChatSocket(io) {
             roomId: composed,
             expireAt: stForJoin.expireAt,
             now: Date.now(),
+            durationMs: ROOM_MAX_AGE_MS,
             remainingMs: Math.max(0, (stForJoin.expireAt || Date.now()) - Date.now()),
           });
         } else if (incomingHas && alreadyHas) {
@@ -1273,7 +1274,8 @@ export function initChatSocket(io) {
         roomId: composed,
         expireAt: st0.expireAt,
         now: Date.now(),
-        remainingMs: Math.max(0, (st0.expireAt || Date.now()) - Date.now()),
+        durationMs: ROOM_MAX_AGE_MS,
+            remainingMs: Math.max(0, (st0.expireAt || Date.now()) - Date.now()),
       });
     });
 
@@ -1487,7 +1489,8 @@ export function initChatSocket(io) {
         roomId: targetRoom,
         expireAt: st.expireAt,
         now: Date.now(),
-        remainingMs: Math.max(0, (st.expireAt || Date.now()) - Date.now()),
+        durationMs: ROOM_MAX_AGE_MS,
+            remainingMs: Math.max(0, (st.expireAt || Date.now()) - Date.now()),
       });
     });
 
@@ -1526,15 +1529,15 @@ function startMentorScheduler(io) {
 export function getOverview() {
   // Aggregate label counts, total messages and reactions
   const totals = {
-    정직: 0,
-    창의: 0,
-    존중: 0,
-    열정: 0,
+    금융이해: 0,
+    계획성: 0,
+    실천의지: 0,
+    위험인식: 0,
     totalMessages: 0,
     totalReactions: 0
   };
 
-  for (const [, msgs] of recentByRoom.entries()) {
+  for (const [, msgs] of messagesByRoom.entries()) {
     totals.totalMessages += msgs.length;
     for (const m of msgs) {
       const set = reactionsByMsg.get(m.id);
@@ -1589,7 +1592,7 @@ export async function aggregateArchives(roomIds = []){
     combo.rooms.push({ roomId: a.roomId, createdAt: a.createdAt, round_number: a.round_number });
     combo.messages.push(...(a.messages||[]));
     for (const [nick, u] of Object.entries(a.perUser || {})){
-      if (!combo.perUser[nick]) combo.perUser[nick] = { nickname: nick, totalMessages:0, totalReactions:0, labels:{ 정직:0, 창의:0, 존중:0, 열정:0 } };
+      if (!combo.perUser[nick]) combo.perUser[nick] = { nickname: nick, totalMessages:0, totalReactions:0, labels:{ 금융이해:0, 계획성:0, 실천의지:0, 위험인식:0 } };
       combo.perUser[nick].totalMessages += (u.totalMessages||0);
       combo.perUser[nick].totalReactions += (u.totalReactions||0);
       for (const k of Object.keys(combo.perUser[nick].labels)){
@@ -1627,7 +1630,7 @@ export async function aggregateRoom(roomId){
     combo.rooms.push({ roomId: a.roomId, createdAt: a.createdAt, round_number: a.round_number });
     combo.messages.push(...(a.messages||[]));
     for (const [nick, u] of Object.entries(a.perUser || {})){
-      if (!combo.perUser[nick]) combo.perUser[nick] = { nickname: nick, totalMessages:0, totalReactions:0, labels:{ 정직:0, 창의:0, 존중:0, 열정:0 } };
+      if (!combo.perUser[nick]) combo.perUser[nick] = { nickname: nick, totalMessages:0, totalReactions:0, labels:{ 금융이해:0, 계획성:0, 실천의지:0, 위험인식:0 } };
       combo.perUser[nick].totalMessages += (u.totalMessages||0);
       combo.perUser[nick].totalReactions += (u.totalReactions||0);
       for (const k of Object.keys(combo.perUser[nick].labels)){

@@ -1,7 +1,8 @@
-import badgeJustice from '@/assets/badges/justice.png';
-import badgePassion from '@/assets/badges/passion.png';
-import badgeRespect from '@/assets/badges/respect.png';
-import badgeCreativity from '@/assets/badges/creativity.png';
+import { lessons, quizResults } from '../../contents/financial-course.js';
+import badgeJustice from '@/assets/images/discussion/badge_1.png';
+import badgePassion from '@/assets/images/discussion/badge_2.png';
+import badgeRespect from '@/assets/images/discussion/badge_4.png';
+import badgeCreativity from '@/assets/images/discussion/badge_3.png';
 import '../../components/user/finalResult/finalResult.css';
 import NextSessionButton from '../../components/user/finalResult/NextSessionButton.jsx';
 import SavePDFButton from '../../components/user/finalResult/SavePDFButton.jsx';
@@ -64,10 +65,7 @@ export default function FinalResultPage() {
   const [data, setData] = useState(null);
   const [quiz, setQuiz] = useState(null);
 
-  // 하드코딩된 비디오 세트 선택 (A세트: 0~2, B세트: 3~9)
-  const VIDEO_SET_A = [0, 1, 2];
-  const VIDEO_SET_B = [3, 4, 5, 6, 7, 8, 9];
-  const selectedVideoSet = VIDEO_SET_B; // ⚙️ 여기서 A/B 전환 가능
+  const selectedVideoSet = lessons.map(lesson => lesson.videoId);
 
   const donutRef = useRef(null);
   const lineRef = useRef(null);
@@ -89,144 +87,10 @@ export default function FinalResultPage() {
     return window.Chart;
   }
 
-  function buildMockSections(){
-    const rnd = (min, max) => Math.floor(Math.random()*(max-min+1))+min;
-    const rounds = [1,2,3];
-    const personaByRound = rounds.map(r => ({
-      round_number: r,
-      labels: { '정직': rnd(8,20), '창의': rnd(4,12), '존중': rnd(4,12), '열정': rnd(4,12) }
-    }));
-    const participationByRound = rounds.map(r => ({
-      round_number: r,
-      totalMessages: rnd(80,140),
-      totalReactions: rnd(150,300),
-      myMessages: rnd(8,25),
-      myReactions: rnd(10,60)
-    }));
-    const totals = { '정직':0,'창의':0,'존중':0,'열정':0 };
-    personaByRound.forEach(r => { Object.keys(totals).forEach(k => totals[k]+=r.labels[k]); });
-    const sum = Object.values(totals).reduce((a,b)=>a+b,0) || 1;
-    const personaIntegrated = {
-      counts: totals,
-      percentages: Object.fromEntries(Object.entries(totals).map(([k,v])=>[k, Math.round(v/sum*1000)/10]))
-    };
-    return {
-      overall: { rank: 1, score: 123.4, totalMessages: participationByRound.reduce((a,b)=>a+b.myMessages,0), totalReactions: participationByRound.reduce((a,b)=>a+b.myReactions,0) },
-      aiSummary: "명확한 기준과 효과적인 요약이 돋보였습니다. '비용, 시간, 영향도'를 기준으로 대안을 비교하는 발언들은 효율적 의사결정의 중요성을 잘 보여주었습니다. 실무에서 이러한 접근 방식을 계속 활용해 주시길 기대합니다.",
-      personaIntegrated,
-      personaByRound,
-      participationByRound,
-      top3Statements: [
-        { nickname:'홍길동', text:'가설을 검증하기 위한 증거를 제시했습니다.', reactionsCount:28, createdAt:Date.now(), round_number:1 },
-        { nickname:'이몽룡', text:'팀 합의를 이끌어낸 포인트를 정리했습니다.', reactionsCount:24, createdAt:Date.now(), round_number:2 },
-        { nickname:'성춘향', text:'반박에 대한 명확한 근거를 제시했습니다.', reactionsCount:20, createdAt:Date.now(), round_number:3 },
-      ],
-      ranking: Array.from({length: 10}).map((_,i)=>({ nickname:`사용자${i+1}`, score: 100 - i*3, rank: i+1 }))
-    };
-  }
-
-  function buildMockQuiz(){
-    // 3라운드 기준 임시 퀴즈 데이터
-    return [1,2,3].map((r)=>({ round_number:r, totalQuestions:10, correctCount: 6 + ((r%3)), correctRate: 60 + (r*8) }));
-  }
-
-  // Helper: fill API data's sections with mock if sparse or missing
-  function fillSectionsWithMockIfSparse(apiData, nick){
-    const mock = buildMockSections();
-    const api = apiData && apiData.sections ? apiData.sections : {};
-
-    const isEmptyObj = (o) => !o || (typeof o === 'object' && Object.keys(o).length === 0);
-    const isEmptyArr = (a) => !Array.isArray(a) || a.length === 0;
-
-    // Decide each field with mock fallback + record what was filled
-    const filled = {
-      overall: false,
-      aiSummary: false,
-      personaIntegrated: false,
-      personaByRound: false,
-      participationByRound: false,
-      top3Statements: false,
-      ranking: false,
-    };
-
-    // overall
-    const overall = api.overall ? api.overall : (filled.overall = true, mock.overall);
-    // aiSummary
-    const aiSummary = api.aiSummary ? api.aiSummary : (filled.aiSummary = true, mock.aiSummary);
-
-    // personaIntegrated (treat empty, or all-zero, as needing mock)
-    const pi = api.personaIntegrated;
-    let personaIntegrated;
-    if (!pi) {
-      personaIntegrated = mock.personaIntegrated; filled.personaIntegrated = true;
-    } else {
-      const counts = pi.counts || {};
-      const percents = pi.percentages || {};
-      const countsEmpty = isEmptyObj(counts);
-      const percentEmpty = isEmptyObj(percents);
-      const countsSum = Object.values(counts).reduce((a,b)=> a + (Number(b)||0), 0);
-      const percentsSum = Object.values(percents).reduce((a,b)=> a + (Number(b)||0), 0);
-      const allZero = (!countsEmpty && countsSum === 0) && (!percentEmpty && percentsSum === 0);
-      if ((countsEmpty && percentEmpty) || allZero){
-        personaIntegrated = mock.personaIntegrated; filled.personaIntegrated = true;
-      } else {
-        personaIntegrated = pi;
-      }
-    }
-
-    // personaByRound
-    const personaByRound = !isEmptyArr(api.personaByRound) ? api.personaByRound : (filled.personaByRound = true, mock.personaByRound);
-    // participationByRound
-    const participationByRound = !isEmptyArr(api.participationByRound) ? api.participationByRound : (filled.participationByRound = true, mock.participationByRound);
-    // top3Statements
-    const top3Statements = !isEmptyArr(api.top3Statements) ? api.top3Statements : (filled.top3Statements = true, mock.top3Statements);
-    // ranking (treat empty array as needing mock)
-    let ranking;
-    if (Array.isArray(api.ranking) && api.ranking.length > 0){
-      ranking = api.ranking;
-    } else {
-      filled.ranking = true;
-      ranking = mock.ranking;
-    }
-
-    const merged = { overall, aiSummary, personaIntegrated, personaByRound, participationByRound, top3Statements, ranking };
-
-    // Backfill overall (통합 등수 및 점수) from ranking if missing
-    try {
-      const ov = { ...(merged.overall || {}) };
-      const rk = Array.isArray(merged.ranking) ? merged.ranking : [];
-      let patched = false;
-      if (rk.length){
-        const me = nick ? rk.find((r)=> r && r.nickname === nick) : null;
-        const pick = me || rk[0];
-        if (ov.rank == null){ ov.rank = pick?.rank ?? (rk.indexOf(pick) + 1); patched = true; }
-        if (ov.score == null && pick?.score != null){ ov.score = pick.score; patched = true; }
-      }
-      if (patched){ merged.overall = ov; }
-    } catch {}
-
-    // Log which fields were filled with mock (if any)
-    try {
-      const filledKeys = Object.entries(filled).filter(([,v]) => v).map(([k]) => k);
-      if (filledKeys.length){
-        console.info('[FinalResultPage] sparse API data → filled with mock for:', filledKeys.join(', '));
-      }
-    } catch {}
-
-    return { sections: merged };
-  }
-
   useEffect(() => {
     let aborted = false;
     async function fetchData(){
-      // 테스트 용이성: roomId가 없으면 임시 데이터로 조회
-      if (!roomId){
-        const mock = { sections: buildMockSections() };
-        setData(mock);
-        setQuiz({ rounds: buildMockQuiz() });
-        setLoading(false);
-        return;
-      }
+      setLoading(true); setError('');
       try {
         // 멀티 비디오 통합 결과 호출
         const created = await http.post(`/api/review/${encodeURIComponent(roomId)}/multi-final-result`, {
@@ -234,31 +98,26 @@ export default function FinalResultPage() {
           videoIds: selectedVideoSet,
         });
         console.log('[FinalResultPage] multi-final-result:', created);
-        if (!aborted) setData(fillSectionsWithMockIfSparse(created, effectiveNick));
+        if (!aborted) setData(created);
       } catch (e) {
         if (!aborted) {
-          setData({ sections: buildMockSections() });
+          setData(null);
+          setError('종합 결과를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
         }
       } finally {
         // 3) 퀴즈 결과는 GET/POST 결과와 무관하게 시도
         try{
-          const qres = await quizApi.getMyScores();
-          if (qres?.ok){
-            const qjson = await qres.json();
-            if (Array.isArray(qjson?.rounds)) setQuiz(qjson);
-            else setQuiz({ rounds: buildMockQuiz() });
-          } else {
-            setQuiz({ rounds: buildMockQuiz() });
-          }
+          const qres = isAdminEffective ? null : await quizApi.getMyScores();
+          if (!aborted) setQuiz({ rounds: quizResults(qres) });
         } catch {
-          setQuiz({ rounds: buildMockQuiz() });
+          if (!aborted) setQuiz({ rounds: quizResults(null) });
         }
         if (!aborted) setLoading(false);
       }
     }
     fetchData();
     return () => { aborted = true };
-  }, [roomId, effectiveNick]);
+  }, [roomId, effectiveNick, isAdminEffective]);
 
   // Log when data/quiz states are updated (for real API integration later)
   useEffect(() => {
@@ -301,14 +160,14 @@ export default function FinalResultPage() {
 
     const personaByRoundFromVideo = Array.isArray(personaByVideo) && personaByVideo.length
       ? personaByVideo.map((v, idx) => ({
-          round_number: (typeof v.video !== 'undefined' ? Number(idx + 1) : idx + 1),
+          round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
           labels: { ...(v.labels || {}) },
         }))
       : [];
 
     const participationByRoundFromVideo = Array.isArray(participationByVideo) && participationByVideo.length
       ? participationByVideo.map((v, idx) => ({
-          round_number: (typeof v.video !== 'undefined' ? Number(idx + 1) : idx + 1),
+          round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
           totalMessages: Number(v.totalMessages || 0),
           totalReactions: Number(v.totalReactions || 0),
           // myMessages / myReactions are not provided per-video; keep 0 so chart renders without mock fallback
@@ -354,14 +213,6 @@ export default function FinalResultPage() {
   const avatarTierClass = `frp-avatar--${rankTier(overall?.rank)}`;
   const rankBadgeClass = `frp-rank-badge--${rankTier(overall?.rank)}`;
 
-  // 학습 완수율 (전체 진행률) - 추후 실제 값 연동 가능
-  const overallProgress = 100; // TODO: 서버 값 연동 시 대체
-  const detailSteps = [
-    { key: 'theory', label: '이론 학습', value: 100 },
-    { key: 'quiz', label: '퀴즈 풀이', value: 100 },
-    { key: 'video', label: '영상 시청', value: 100 },
-    { key: 'discussion', label: '토론 진행', value: 100 },
-  ];
     const navigate = useNavigate();
     const handleClick = () => {
     // PDF 저장 기능은 별도 구현 필요
@@ -377,10 +228,10 @@ export default function FinalResultPage() {
 
       // Colors aligned with CSS swatches
       const C = {
-        justice: '#f39c12', // 정직
-        passion: '#e74c3c', // 열정
-        respect: '#ff7f50', // 존중
-        creativity: '#f1c40f', // 창의
+        justice: '#f39c12', // 금융이해
+        passion: '#e74c3c', // 위험인식
+        respect: '#ff7f50', // 실천의지
+        creativity: '#f1c40f', // 계획성
         round1: '#3a7bd5',
         round2: '#ff6b6b',
         round3: '#f4a261',
@@ -390,7 +241,7 @@ export default function FinalResultPage() {
       const donutCtx = donutRef.current?.getContext('2d');
       if (donutCtx){
         donutChartRef.current?.destroy?.();
-        const labels = ['정직','열정','존중','창의'];
+        const labels = ['금융이해','위험인식','실천의지','계획성'];
         const vals = labels.map(k => Number(pComputed?.[k]||0));
         const nonZeroCount = vals.filter(v => v > 0).length;
         const totalVal = vals.reduce((a, b) => a + b, 0);
@@ -431,10 +282,10 @@ export default function FinalResultPage() {
 
         // --- Badge images for persona labels (Vite-safe asset paths) ---
         const badgeSources = {
-          '정직': badgeJustice,
-          '열정': badgePassion,
-          '존중': badgeRespect,
-          '창의': badgeCreativity,
+          '금융이해': badgeJustice,
+          '위험인식': badgePassion,
+          '실천의지': badgeRespect,
+          '계획성': badgeCreativity,
         };
         const badgeImages = {};
         Object.entries(badgeSources).forEach(([k, src]) => {
@@ -640,11 +491,11 @@ export default function FinalResultPage() {
         }
       }
 
-      // --- Persona by Round (LINE: x=인재상 4가지, series=라운드) ---
+      // --- Persona by Round (LINE: x=발언 역량 4가지, series=라운드) ---
       const lineCtx = lineRef.current?.getContext('2d');
       if (lineCtx){
         lineChartRef.current?.destroy?.();
-        const traitLabels = ['정직','열정','존중','창의'];
+        const traitLabels = ['금융이해','위험인식','실천의지','계획성'];
         const colorPool = [C.round1, C.round2, C.round3, '#9b59b6', '#16a085'];
         const datasets = (personaByRound || []).map((r, idx) => ({
           label: `R${r.round_number ?? (idx+1)}`,
@@ -808,27 +659,18 @@ export default function FinalResultPage() {
 
         <article className="frp-card frp-completion">
           <header className="frp-card__header">
-            <h3>학습 완수율</h3>
+            <h3>차시별 퀴즈 결과</h3>
           </header>
           <div className="frp-completion__body">
-            {/* 전체 진행률 (상단 영역) */}
-            <div className="frp-completion__overall">
-              <div className="frp-completion__title">전체 진행률</div>
-              <div className="frp-progress frp-progress--lg" role="progressbar" aria-valuenow={overallProgress} aria-valuemin={0} aria-valuemax={100}>
-                <div className="frp-progress__bar" style={{ width: `${Math.min(overallProgress,100)}%` }} />
-                <span className="frp-progress__label">전체 진행률 {overallProgress}%</span>
-              </div>
-            </div>
-
-            {/* 세부 진행 (하단 영역) */}
+            <p>{isAdminEffective ? '개별 퀴즈 점수는 학생 본인의 종합 화면에서 확인할 수 있습니다.' : '저장된 선택형 문항의 정답 수입니다.'}</p>
             <div className="frp-completion__details">
               <ul className="frp-circle-list">
-                {detailSteps.map(s => (
-                  <li key={s.key} className="frp-circle">
+                {(quiz?.rounds || quizResults(null)).map(result => (
+                  <li key={result.round_number} className="frp-circle">
                     <div className="frp-circle__ring">
-                      <div className="frp-circle__value">{s.value}%</div>
+                      <div className="frp-circle__value">{result.correctCount == null ? '—' : `${result.correctCount}/${result.totalQuestions}`}</div>
                     </div>
-                    <div className="frp-circle__label">{s.label}</div>
+                    <div className="frp-circle__label">{result.round_number}차시 · {result.totalQuestions ? (isAdminEffective ? '학생 화면에서 확인' : result.correctCount == null ? '기록 없음' : '정답') : '자료 준비 중'}</div>
                   </li>
                 ))}
               </ul>
@@ -837,17 +679,17 @@ export default function FinalResultPage() {
         </article>
       </section>
 
-      {/* SECTION 2: 인재상 통합 분포(도넛) + 라운드별 인재상 분포(꺾은선-플레이스홀더) */}
+      {/* SECTION 2: 발언 역량 통합 분포(도넛) + 라운드별 발언 역량 분포(꺾은선-플레이스홀더) */}
       <section className="frp-section frp-section--2">
         <article className="frp-card frp-donut">
-          <header className="frp-card__header"><h3>인재상 통합 분포</h3></header>
+          <header className="frp-card__header"><h3>발언 역량 통합 분포</h3></header>
           <div className="frp-donut__wrap">
-            <canvas ref={donutRef} className="frp-donut__chart" aria-label="인재상 도넛" />
+            <canvas ref={donutRef} className="frp-donut__chart" aria-label="발언 역량 도넛" />
           </div>
         </article>
 
         <article className="frp-card frp-line">
-          <header className="frp-card__header"><h3>라운드별 인재상 분포</h3></header>
+          <header className="frp-card__header"><h3>라운드별 발언 역량 분포</h3></header>
           <div className="frp-line__chart" aria-hidden="false">
             <canvas ref={lineRef} style={{width:'100%', height:'100%'}} />
           </div>

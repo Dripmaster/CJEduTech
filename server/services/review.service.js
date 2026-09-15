@@ -91,7 +91,7 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
       sections: {
         overall: { rank: null, score: null, totalMessages: 0, totalReactions: 0 },
         aiSummary: null,
-        personaIntegrated: { counts: { '정직':0,'창의':0,'존중':0,'열정':0 }, percentages: { '정직':0,'창의':0,'존중':0,'열정':0 } },
+        personaIntegrated: { counts: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 }, percentages: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } },
         personaByRound: [],
         participationByRound: [],
         top3Statements: [],
@@ -107,20 +107,20 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
   const personaByRound = []; // [{ round_number, labels:{...} }]
   const participationByRound = []; // [{ round_number, totalMessages, totalReactions, myMessages, myReactions }]
   const allMessages = [];
-  const integratedLabels = { '정직':0,'창의':0,'존중':0,'열정':0 };
+  const integratedLabels = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
   // mine: integrated and per round
-  const integratedLabelsMine = { '정직':0,'창의':0,'존중':0,'열정':0 };
+  const integratedLabelsMine = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
   const personaByRoundMine = []; // [{ round_number, labels:{...} }]
 
   for (const a of archives){
     const rno = (typeof a.round_number === 'number') ? a.round_number : undefined;
-    const labelsAgg = { '정직':0,'창의':0,'존중':0,'열정':0 };
+    const labelsAgg = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
     const msgs = Array.isArray(a.messages) ? a.messages : [];
     let totalReactions = 0, myMsgs = 0, myReacts = 0;
 
     // per-user merge + per-round aggregates
     for (const [nick, u] of Object.entries(a.perUser || {})){
-      if (!perUser[nick]) perUser[nick] = { nickname:nick, totalMessages:0, totalReactions:0, labels:{ '정직':0,'창의':0,'존중':0,'열정':0 } };
+      if (!perUser[nick]) perUser[nick] = { nickname:nick, totalMessages:0, totalReactions:0, labels:{ '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } };
       perUser[nick].totalMessages += (u.totalMessages||0);
       perUser[nick].totalReactions += (u.totalReactions||0);
       for (const k of Object.keys(perUser[nick].labels)){
@@ -133,7 +133,7 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
 
     // my labels for this archive (round/video)
     const myAgg = (a.perUser && nickname && a.perUser[nickname]) ? a.perUser[nickname] : null;
-    const myLabelsThis = myAgg?.labels || { '정직':0,'창의':0,'존중':0,'열정':0 };
+    const myLabelsThis = myAgg?.labels || { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
     for (const k of Object.keys(integratedLabelsMine)) integratedLabelsMine[k] += (myLabelsThis[k] || 0);
 
     for (const m of msgs){
@@ -385,7 +385,7 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
       sections: {
         overall: { rank: null, score: null, totalMessages: 0, totalReactions: 0 },
         aiSummary: null,
-        personaIntegrated: { counts: { '정직':0,'창의':0,'존중':0,'열정':0 }, percentages: { '정직':0,'창의':0,'존중':0,'열정':0 } },
+        personaIntegrated: { counts: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 }, percentages: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } },
         personaByVideo: [],
         participationByVideo: [],
         ranking: [],
@@ -395,13 +395,13 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
       return { cached: false, ...empty };
   }
 
-  const mergedLabels = { '정직':0,'창의':0,'존중':0,'열정':0 };
+  const mergedLabels = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
   const mergedRanking = {};
   const participationByVideo = [];
   const personaByVideo = [];
   // mine
   const personaByVideoMine = [];
-  const mergedLabelsMine = { '정직':0,'창의':0,'존중':0,'열정':0 };
+  const mergedLabelsMine = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
 
   let totalMessages = 0;
   let totalReactions = 0;
@@ -428,12 +428,12 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
       for (const k of Object.keys(mergedLabelsMine)) mergedLabelsMine[k] += (meRowSec.labels[k] || 0);
       personaByVideoMine.push({ video: sec.video, labels: { ...meRowSec.labels } });
     } else {
-      personaByVideoMine.push({ video: sec.video, labels: { '정직':0,'창의':0,'존중':0,'열정':0 } });
+      personaByVideoMine.push({ video: sec.video, labels: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } });
     }
 
     for (const r of (sec.ranking || [])) {
       if (!mergedRanking[r.nickname])
-        mergedRanking[r.nickname] = { nickname: r.nickname, totalMessages: 0, totalReactions: 0, labels: { '정직':0,'창의':0,'존중':0,'열정':0 } };
+        mergedRanking[r.nickname] = { nickname: r.nickname, totalMessages: 0, totalReactions: 0, labels: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } };
       mergedRanking[r.nickname].totalMessages += r.totalMessages || 0;
       mergedRanking[r.nickname].totalReactions += r.totalReactions || 0;
       for (const k of Object.keys(mergedLabels)) {
@@ -471,7 +471,7 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
     percentages: Object.fromEntries(Object.entries(mergedLabelsMine).map(([k,v])=>[k, Math.round((v/totalLabelSumMine2)*1000)/10]))
   };
   const personaByRoundMine = Array.isArray(personaByVideoMine)
-    ? personaByVideoMine.map((v, idx) => ({ round_number: idx + 1, labels: { ...(v.labels || {}) } }))
+    ? personaByVideoMine.map((v, idx) => ({ round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1, labels: { ...(v.labels || {}) } }))
     : [];
 
   const overall = {
@@ -483,12 +483,12 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
 
   // Derive round-shaped arrays from video-based arrays (to avoid client-side mock fallbacks)
   const personaByRound = Array.isArray(personaByVideo) ? personaByVideo.map((v, idx) => ({
-    round_number: idx + 1,
+    round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
     labels: { ...(v.labels || {}) },
   })) : [];
 
   const participationByRound = Array.isArray(participationByVideo) ? participationByVideo.map((v, idx) => ({
-    round_number: idx + 1,
+    round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
     totalMessages: Number(v.totalMessages || 0),
     totalReactions: Number(v.totalReactions || 0),
     myMessages: Number(v.myMessages || 0),
