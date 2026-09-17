@@ -8,7 +8,7 @@ import {io} from 'socket.io-client';
 const root=new URL('../',import.meta.url).pathname;
 const ack=(socket,event,payload)=>new Promise((resolve,reject)=>socket.timeout(1500).emit(event,payload,(err,result)=>err?reject(err):resolve(result)));
 
-test('teacher starts the same quiz for 20 students, including reconnects, without starting discussion', {timeout:15000}, async()=>{
+test('teacher starts the quiz or video stage for 20 students, including reconnects, without starting discussion', {timeout:15000}, async()=>{
  const allocator=createServer();allocator.listen(0,'127.0.0.1');await once(allocator,'listening');
  const port=allocator.address().port;await new Promise(resolve=>allocator.close(resolve));
  const child=spawn(process.execPath,['index.js'],{cwd:root+'server',env:{...process.env,PORT:String(port),DB_HOST:'127.0.0.1',AI_SERVER_BASE:'http://127.0.0.1:1'},stdio:['ignore','pipe','pipe']});
@@ -40,6 +40,7 @@ test('teacher starts the same quiz for 20 students, including reconnects, withou
    const response=await ack(teacher.socket,'course:start-quiz',{round});
    assert.equal(response.ok,true);
    assert.equal(response.state.round,round);
+   assert.equal(response.state.step,round <= 2 ? 2 : 3);
    assert.ok(response.state.commandId);
    for(const [state] of await Promise.all(deliveries))assert.deepEqual(state,response.state);
    // Retrying a command keeps its identity so clients do not lose in-progress answers.
@@ -49,6 +50,7 @@ test('teacher starts the same quiz for 20 students, including reconnects, withou
   const rejoined=students[0].socket;rejoined.disconnect();rejoined.connect();await once(rejoined,'connect');
   const snapshot=await ack(rejoined,'course:join',{isAdmin:false});
   assert.equal(snapshot.state.round,4);
+  assert.equal(snapshot.state.step,3);
   assert.equal(snapshot.state.commandId,received[0].at(-1).commandId);
   assert.equal(discussionEvents,0);
   assert.equal((await connect()).state.round,4);
