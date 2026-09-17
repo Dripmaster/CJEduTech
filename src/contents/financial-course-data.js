@@ -2,6 +2,7 @@
 export const lessons = [
   {
     "id": 1,
+    "quizEnabled": true,
     "title": "금융과 소득의 이해",
     "videoId": 0,
     "videoKey": "financial_1",
@@ -130,6 +131,7 @@ export const lessons = [
   },
   {
     "id": 2,
+    "quizEnabled": true,
     "title": "티끌 모아 태산",
     "videoId": 1,
     "videoKey": "financial_2",
@@ -195,6 +197,7 @@ export const lessons = [
   },
   {
     "id": 3,
+    "quizEnabled": false,
     "title": "미래 위험으로부터 보호",
     "videoId": 2,
     "videoKey": "financial_3",
@@ -228,6 +231,7 @@ export const lessons = [
   },
   {
     "id": 4,
+    "quizEnabled": false,
     "title": "하이리스크, 하이리턴",
     "videoId": 3,
     "videoKey": "financial_4",

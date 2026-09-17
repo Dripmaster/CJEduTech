@@ -8,6 +8,23 @@ export function getLesson(round) {
   if (!lesson) throw new RangeError('차시는 1~4여야 합니다.');
   return lesson;
 }
+// Internal step IDs stay stable for saved progress and discussion components.
+export function afterTheory(round) {
+  return getLesson(round).quizEnabled
+    ? {step: 2, path: 'quiz', label: '퀴즈'}
+    : {step: 3, path: 'video', label: '영상'};
+}
+export function lessonSteps(round) {
+  return STEPS.map((label, index) => ({step: index + 1, label}))
+    .filter(item => item.step !== 2 || getLesson(round).quizEnabled);
+}
+export function syncTarget(state, progress, live) {
+  if (!state?.commandId || !Number.isInteger(state.round) || state.round < 1 || state.round > 4) return null;
+  const target = afterTheory(state.round);
+  // Reconnects catch up students still in theory, but never rewind later stages.
+  if (!live && (progress.round > state.round || (progress.round === state.round && progress.step >= target.step))) return null;
+  return target;
+}
 export function nextLesson(round) {
   const current = getLesson(round);
   if (current.id === 4) return { round: 4, step: 5, videoId: 3, final: true };
@@ -18,11 +35,12 @@ export function restoreProgress(raw) {
   try {
     const value = JSON.parse(raw);
     if (!value || !Number.isInteger(value.round) || !Number.isInteger(value.step) || value.step < 1 || value.step > 5) return initial;
-    return { round: getLesson(value.round).id, step: value.step, videoId: value.round - 1 };
+    return { round: getLesson(value.round).id, step: value.step === 2 ? afterTheory(value.round).step : value.step, videoId: value.round - 1 };
   } catch { return initial; }
 }
 export function scoreQuiz(round, answers) {
-  const questions = getLesson(round).quizPages.flatMap(page => page.questions).filter(q => q.kind === 'choice');
+  const lesson = getLesson(round);
+  const questions = (lesson.quizEnabled ? lesson.quizPages : []).flatMap(page => page.questions).filter(q => q.kind === 'choice');
   return {
     complete: questions.length > 0 && questions.every(q => Number.isInteger(answers[q.id]) && answers[q.id] >= 0 && answers[q.id] < q.options.length),
     correct: questions.filter(q => answers[q.id] === q.answer).length,
@@ -35,6 +53,6 @@ export function quizResults(scores) {
     const raw = scores?.[`round${lesson.id}_score`];
     const score = raw == null || !total ? null : Number(raw);
     const valid = score != null && Number.isFinite(score) && score >= 0 && score <= 1;
-    return { round_number: lesson.id, totalQuestions: total, correctCount: valid ? Math.round(score * total) : null, correctRate: valid ? score * 100 : null };
+    return { status: !lesson.quizEnabled ? 'not_applicable' : valid ? 'recorded' : 'missing', round_number: lesson.id, totalQuestions: total, correctCount: valid ? Math.round(score * total) : null, correctRate: valid ? score * 100 : null };
   });
 }

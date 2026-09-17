@@ -662,7 +662,7 @@ export default function FinalResultPage() {
             <h3>차시별 퀴즈 결과</h3>
           </header>
           <div className="frp-completion__body">
-            <p>{isAdminEffective ? '개별 퀴즈 점수는 학생 본인의 종합 화면에서 확인할 수 있습니다.' : '저장된 선택형 문항의 정답 수입니다.'}</p>
+            <p>{isAdminEffective ? '개별 퀴즈 점수는 학생 본인의 종합 화면에서 확인할 수 있습니다.' : '1·2차시 선택형 문항의 정답 수입니다. 3·4차시는 퀴즈를 진행하지 않습니다.'}</p>
             <div className="frp-completion__details">
               <ul className="frp-circle-list">
                 {(quiz?.rounds || quizResults(null)).map(result => (
@@ -670,7 +670,7 @@ export default function FinalResultPage() {
                     <div className="frp-circle__ring">
                       <div className="frp-circle__value">{result.correctCount == null ? '—' : `${result.correctCount}/${result.totalQuestions}`}</div>
                     </div>
-                    <div className="frp-circle__label">{result.round_number}차시 · {result.totalQuestions ? (isAdminEffective ? '학생 화면에서 확인' : result.correctCount == null ? '기록 없음' : '정답') : '자료 준비 중'}</div>
+                    <div className="frp-circle__label">{result.round_number}차시 · {result.status === 'not_applicable' ? '퀴즈 없음' : result.totalQuestions ? (isAdminEffective ? '학생 화면에서 확인' : result.correctCount == null ? '기록 없음' : '정답') : '자료 준비 중'}</div>
                   </li>
                 ))}
               </ul>

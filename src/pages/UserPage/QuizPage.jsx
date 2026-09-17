@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useRoundStep } from '../../contexts/RoundStepContext';
 import { useUser } from '../../contexts/UserContext';
 import { getLesson, scoreQuiz } from '../../contents/financial-course.js';
@@ -7,7 +7,7 @@ import { quizApi } from '../../api/quiz';
 import CourseShell from '../../components/financial/CourseShell';
 
 export default function QuizPage() {
-  const { round, setStep } = useRoundStep();
+  const { round, step, setStep } = useRoundStep();
   const { isAdmin } = useUser();
   const navigate = useNavigate();
   const lesson = getLesson(round);
@@ -19,6 +19,9 @@ export default function QuizPage() {
   const page = lesson.quizPages[pageIndex];
   const result = scoreQuiz(round, answers);
   const next = () => {setStep(3);navigate(`/${isAdmin?'admin':'user'}/video`);};
+  useEffect(() => {
+    if (!lesson.quizEnabled && step !== 3) setStep(3);
+  }, [lesson.quizEnabled, step, setStep]);
   const finish = async () => {
     if (isAdmin) { next(); return; }
     if (!result.complete || saving) return;
@@ -27,6 +30,7 @@ export default function QuizPage() {
     catch { setError('점수를 저장하지 못했습니다. 연결 상태를 확인하고 다시 저장해 주세요.'); }
     finally { setSaving(false); }
   };
+  if (!lesson.quizEnabled) return <Navigate to={`/${isAdmin?'admin':'user'}/video`} replace />;
   return <CourseShell stage={2}>
     {!page ? <section className="finance-empty"><h1>{round}차시 퀴즈 자료 준비 중</h1><p>퀴즈 자료가 아직 전달되지 않았습니다.</p><p>이 차시의 퀴즈 점수는 기록하지 않습니다.</p><button onClick={next}>자료 없이 다음 단계 확인</button></section> : <>
       <div className="finance-page-title"><h1>{page.title.replace(/\s+[12]-[124]\s+(확인 문제|상황 판단)$/,'')}</h1><span>{round}차시 · 확인 문제 · 원본 {page.page}쪽</span></div>

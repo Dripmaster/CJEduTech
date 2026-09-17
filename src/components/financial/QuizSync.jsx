@@ -1,5 +1,6 @@
 import {createContext, useContext, useEffect, useRef, useState} from 'react';
 import {useLocation, useNavigate} from 'react-router-dom';
+import {syncTarget} from '../../contents/financial-course.js';
 import {socket} from '../../api/chat';
 import {useUser} from '../../contexts/UserContext';
 import {useRoundStep} from '../../contexts/RoundStepContext';
@@ -64,25 +65,25 @@ export default function QuizSync({children}) {
     if (handled.current === state.commandId) return;
     handled.current = state.commandId;
     sessionStorage.setItem(HANDLED_KEY, state.commandId);
-    // A reconnect must not send a student who already finished back to the quiz.
-    if (!pending.live && (round > state.round || (round === state.round && step >= 2))) return;
+    const target = syncTarget(state, {round, step}, pending.live);
+    if (!target) return;
     setRound(state.round);
-    setStep(2);
-    navigate('/user/quiz', {replace:true});
+    setStep(target.step);
+    navigate(`/user/${target.path}`, {replace:true});
   }, [pending, isAdmin, nickname, pathname, round, step, setRound, setStep, navigate]);
 
-  const startQuiz = lessonRound => new Promise((resolve, reject) => {
+  const startNext = lessonRound => new Promise((resolve, reject) => {
     if (!connected || !socket.connected) {
       reject(new Error('수업 서버 연결 후 다시 눌러 주세요.'));
       return;
     }
     socket.timeout(5000).emit('course:start-quiz', {round:lessonRound}, (error, response) => {
-      if (error || !response?.ok) reject(new Error(response?.error || '퀴즈 시작을 확인하지 못했습니다. 다시 눌러 주세요.'));
+      if (error || !response?.ok) reject(new Error(response?.error || '다음 단계 시작을 확인하지 못했습니다. 다시 눌러 주세요.'));
       else resolve(response.state);
     });
   });
 
-  return <QuizSyncContext.Provider value={{connected, startQuiz}}>{children}</QuizSyncContext.Provider>;
+  return <QuizSyncContext.Provider value={{connected, startNext}}>{children}</QuizSyncContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- Provider and hook form one course control API.
