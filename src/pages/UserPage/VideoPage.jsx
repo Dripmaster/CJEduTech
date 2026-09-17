@@ -33,11 +33,11 @@ export default function VideoPage() {
   const [error, setError] = useState(false);
   const configured = import.meta.env[`VITE_FINANCIAL_VIDEO_${round}`] || lesson.videoSrc;
   const next = () => {setStep(4);navigate(`/${isAdmin?'admin':'user'}/aiDiscussion`);};
-  if (!isAdmin) return <StudentVideoGuide key={round} title={`${round}차시 · ${lesson.title} · 영상`} onNext={next}/>;
+  if (!isAdmin) return <StudentVideoGuide key={round} title={`${round}차시 · ${lesson.videoTitle} · 영상`} onNext={next}/>;
   return <div className="video-page">
-    <PageHeader title={`${round}차시 · ${lesson.title} · 영상`}/>
+    <PageHeader title={`${round}차시 · ${lesson.videoTitle} · 영상`}/>
     <main className="video-main">
-      <div className="video-player">{configured ? <video className="video-element" src={configured} controls playsInline preload="metadata" onError={() => setError(true)}/> : <section className="finance-empty"><h2>영상 파일 준비 중</h2><p>시나리오 {round}의 영상이 아직 전달되지 않았습니다.</p></section>}</div>
+      <div className="video-player">{configured ? <video className="video-element" src={configured} controls playsInline preload="metadata" onError={() => setError(true)}/> : <section className="finance-empty"><h2>영상 파일 준비 중</h2><p>원본 {lesson.sourceScenarioId}번 영상이 아직 전달되지 않았습니다.</p></section>}</div>
       <footer className="video-footer">
         <p className="video-guide">{error ? '영상을 재생하지 못했습니다. 영상 주소와 파일 형식을 확인해 주세요.' : '강사의 안내에 따라 시청해 주세요.'}</p>
         <button className="finish-button" onClick={next}>{configured ? '토론으로 이동' : '영상 없이 토론 화면 확인'}</button>
