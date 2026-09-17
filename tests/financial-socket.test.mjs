@@ -54,6 +54,8 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
   const files=await readdir(archive);const archives=[];
   for(const file of files.filter(f=>f.endsWith('.json'))) archives.push(JSON.parse(await readFile(path.join(archive,file),'utf8')));
   assert.equal(new Set(archives.map(a=>a.round_number)).size,4);
+  const firstTopics=['목표 정하기','현재 점검','진단','기초적 노후 생활'];
+  for(const item of archives) assert.equal(item.topic,firstTopics[item.round_number-1]);
   const fourth=archives.find(a=>a.round_number===4);
   assert.equal(fourth.messages.length,101);
   assert.equal(fourth.perUser['early-student'].totalMessages,1);

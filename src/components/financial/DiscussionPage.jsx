@@ -25,6 +25,6 @@ export default function DiscussionPage() {
       <button onClick={()=>setShowGuide(true)}>토론 주제 보기</button>
       {isAdmin && <><button disabled={!connected} onClick={()=>socket.emit('room:next',{dir:-1})}>이전 주제</button><button disabled={!connected} onClick={()=>socket.emit('room:next',{})}>다음 주제</button><button disabled={!connected} onClick={()=>socket.emit('ai:ment:request',{})}>AI 참여 안내</button><button disabled={!connected} onClick={()=>socket.emit('room:end',{})}>토론 종료</button></>}
     </div>
-    {showGuide && <div className="finance-guide" role="dialog" aria-modal="true" aria-label={`${round}차시 토론 주제`}><div className="finance-course"><h1>{round}차시 · {lesson.title}</h1><ol>{lesson.topics.map((topic,index)=><li key={topic}><strong>{topic}</strong><p className="finance-topic-detail">{lesson.topicDetails[index]}</p></li>)}</ol><p>각 주제에 대해 자신의 생각과 이유를 이야기해 주세요. 강사의 안내에 따라 순서대로 진행합니다.</p><button autoFocus className="primary" onClick={()=>{setStarted(true);setShowGuide(false);}}>토론 화면으로</button></div></div>}
+    {showGuide && <div className="finance-guide" role="dialog" aria-modal="true" aria-label={`${round}차시 토론 주제`}><div className="finance-course"><h1>{round}차시 · {lesson.videoTitle}</h1><ol>{lesson.topics.map((topic,index)=><li key={topic}><strong>{topic}</strong><p className="finance-topic-detail">{lesson.topicDetails[index]}</p></li>)}</ol><p>각 주제에 대해 자신의 생각과 이유를 이야기해 주세요. 강사의 안내에 따라 순서대로 진행합니다.</p><button autoFocus className="primary" onClick={()=>{setStarted(true);setShowGuide(false);}}>토론 화면으로</button></div></div>}
   </div>;
 }
