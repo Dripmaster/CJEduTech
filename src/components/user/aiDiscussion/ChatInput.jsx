@@ -9,8 +9,8 @@ export default function ChatInput() {
     const { round, setRound, step, setStep } = useRoundStep();
   const send = () => {
     if (!text.trim()) return;
-    const nickname = localStorage.getItem("nickname") || "익명";
-    const avatar = localStorage.getItem("avatarUrl");
+    const nickname = sessionStorage.getItem("nickname") || "익명";
+    const avatar = sessionStorage.getItem("avatarUrl");
     console.log("sendAvatar:",avatar);
     socket.emit("message:send", {
       roomId: "general",

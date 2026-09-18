@@ -2,7 +2,7 @@
 
 // src/api/quiz.js
 // 퀴즈 점수 관련 API 래퍼
-// - 모든 요청은 http 유틸을 통해 credentials: 'include' 가 자동 적용됩니다.
+// - 모든 요청은 http 유틸을 통해 현재 탭의 인증 토큰이 적용됩니다.
 import { http } from '@/lib/http';
 
 export const quizApi = {

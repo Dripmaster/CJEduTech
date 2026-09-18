@@ -23,7 +23,7 @@ export default function AIChat({ onTopicChange = () => {}, absoluteOnScroll = fa
   const [dots, setDots] = useState(".");
   const [hidden, setHidden] = useState(false);
 
-  const myNick = typeof window !== "undefined" ? localStorage.getItem("nickname") : null;
+  const myNick = typeof window !== "undefined" ? sessionStorage.getItem("nickname") : null;
   const thinkTimerRef = useRef(null);
   const dotsTimerRef = useRef(null);
   const pendingRef = useRef(null);

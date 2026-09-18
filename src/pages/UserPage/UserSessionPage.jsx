@@ -9,11 +9,16 @@ import { useUser } from "../../contexts/UserContext";
 export default function UserSessionPage(){
     const navigate = useNavigate();
     const [progress, setProgress] = useState(0);
-    const {setIsAdmin} = useUser();
+    const {setIsAdmin,setNickname,setAvatarUrl} = useUser();
 
     useEffect(() => {
         setIsAdmin(false);
-        localStorage.removeItem("isAdmin");
+        if (sessionStorage.getItem('isAdmin') === 'true') {
+            sessionStorage.removeItem('nickname');
+            sessionStorage.removeItem('avatarUrl');
+            setNickname(''); setAvatarUrl('');
+        }
+        sessionStorage.removeItem("isAdmin");
         let start = Date.now();
         const interval = setInterval(() => {
             const elapsed = Date.now() - start;

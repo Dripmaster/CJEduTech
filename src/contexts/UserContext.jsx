@@ -1,30 +1,10 @@
-// src/contexts/UserContext.jsx
-import { createContext, useContext, useState, useEffect } from 'react';
-
+import { createContext, useContext, useState } from 'react';
 const UserContext = createContext();
-
 export function UserProvider({ children }) {
-  const [nickname, setNickname] = useState('');
-  const [avatarUrl, setAvatarUrl] = useState('');
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem('isAdmin') === 'true');
-
-  useEffect(() => {
-    const storedNickname = localStorage.getItem('nickname');
-    const storedAvatarUrl = localStorage.getItem('avatarUrl');
-    const storedIsAdmin = localStorage.getItem('isAdmin');
-    if (storedNickname) setNickname(storedNickname);
-    if (storedAvatarUrl) setAvatarUrl(storedAvatarUrl);
-    if (storedIsAdmin === 'true') setIsAdmin(true);
-    if (isAdmin) setNickname('admin');
-  }, []);
-
-  return (
-    <UserContext.Provider value={{ nickname, setNickname, avatarUrl, setAvatarUrl, isAdmin, setIsAdmin }}>
-      {children}
-    </UserContext.Provider>
-  );
+  const [nickname, setNickname] = useState(() => sessionStorage.getItem('nickname') || '');
+  const [avatarUrl, setAvatarUrl] = useState(() => sessionStorage.getItem('avatarUrl') || '');
+  const [isAdmin, setIsAdmin] = useState(() => sessionStorage.getItem('isAdmin') === 'true');
+  return <UserContext.Provider value={{nickname,setNickname,avatarUrl,setAvatarUrl,isAdmin,setIsAdmin}}>{children}</UserContext.Provider>;
 }
-
-export function useUser() {
-  return useContext(UserContext);
-}
+// eslint-disable-next-line react-refresh/only-export-components -- Existing context API.
+export function useUser() { return useContext(UserContext); }

@@ -49,12 +49,11 @@ export default function FinalResultPage() {
   }
   const location = useLocation();
   const search = new URLSearchParams(location.search);
-  const roomId = useMemo(() => search.get('roomId') || location.state?.roomId || localStorage.getItem('roomId') || 'general', [location.search, location.state]);
-  const nickname = useMemo(() => search.get('nickname') || location.state?.nickname || localStorage.getItem('nickname') || '', [location.search, location.state]);
+  const roomId = useMemo(() => search.get('roomId') || location.state?.roomId || sessionStorage.getItem('roomId') || 'general', [location.search, location.state]);
+  const nickname = useMemo(() => search.get('nickname') || location.state?.nickname || sessionStorage.getItem('nickname') || '', [location.search, location.state]);
   const learnedAtStr = useMemo(() => new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' }), []);
   const { avatarUrl,isAdmin,setIsAdmin } = useUser();
-  // admin override via URL param: ?admin or ?admin=1
-  const isAdminEffective = isAdmin || search.has('admin');
+  const isAdminEffective = isAdmin;
 
   // Admin-controlled nickname selection
   const [adminTargetNick, setAdminTargetNick] = useState(nickname);

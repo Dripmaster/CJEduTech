@@ -2,6 +2,8 @@ import { BrowserRouter, Routes, Route, Outlet } from 'react-router-dom';
 import { UserProvider } from './contexts/UserContext';  
 import { useEffect, useMemo, useState, useRef } from "react";
 import { RoundStepProvider, useRoundStep } from './contexts/RoundStepContext.jsx';
+import ExitPage from './pages/UserPage/ExitPage';
+import SessionGate from './components/financial/SessionGate';
 import QuizSync from './components/financial/QuizSync.jsx';
 
 import LoginPage from './pages/UserPage/LoginPage.jsx';
@@ -54,8 +56,9 @@ function App() {
     <RoundStepProvider>
     <UserProvider> {/* 전역 사용자 상태 적용 */}
       <BrowserRouter>
-        <QuizSync>
+        <SessionGate><QuizSync>
         <Routes>
+          <Route path="/exit" element={<ExitPage />} />
           <Route path="/" element={<UserSessionPage />} />
 
           <Route path="/user/login" element={<LoginPage/>}/>
@@ -86,7 +89,7 @@ function App() {
 
           <Route path="/test" element={<TestApi />} />
         </Routes>
-        </QuizSync>
+        </QuizSync></SessionGate>
       </BrowserRouter>
     </UserProvider>
     </RoundStepProvider>

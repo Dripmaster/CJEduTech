@@ -14,11 +14,11 @@ export default function ChatContainer({ nickname, topic }) {
     const { round, setRound, step, setStep,videoId,setVideoId } = useRoundStep();
     useEffect(() => {
       if (!nickname) {
-        const storedNickname = localStorage.getItem("nickname");
+        const storedNickname = sessionStorage.getItem("nickname");
         if (storedNickname) setLocalNickname(storedNickname);
       }
       if (!topic) {
-        const storedTopic = localStorage.getItem("topic");
+        const storedTopic = sessionStorage.getItem("topic");
         if (storedTopic) setLocalTopic(storedTopic);
       }
     }, [nickname, topic]);
@@ -26,7 +26,7 @@ export default function ChatContainer({ nickname, topic }) {
     const handleTopicChange = (nextTopic) => {
       if (!nextTopic) return;
       setLocalTopic(nextTopic);
-      try { localStorage.setItem('topic', nextTopic); } catch {}
+      try { sessionStorage.setItem('topic', nextTopic); } catch {}
     };
 
     return (

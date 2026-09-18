@@ -18,7 +18,7 @@ export default function LoadResultPage() {
   const nickname =
     params.get('nickname') ||
     sessionStorage.getItem('myNickname') ||
-    localStorage.getItem('nickname') ||
+    sessionStorage.getItem('nickname') ||
     '';
 
   // 단계 텍스트

@@ -1,3 +1,4 @@
+import {createRequire} from 'node:module';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -8,6 +9,9 @@ import path from 'node:path';
 import {once} from 'node:events';
 import {io} from 'socket.io-client';
 const root=new URL('../',import.meta.url).pathname;
+const require=createRequire(new URL('../server/package.json',import.meta.url));
+const jwt=require('jsonwebtoken');
+const teacherToken=jwt.sign({uid:'test-teacher',role:'admin'},'teacher-socket-test');
 const event=(socket,name)=>Promise.race([once(socket,name).then(args=>args[0]),new Promise((_,reject)=>{const timer=setTimeout(()=>reject(new Error('Timeout '+name)),8000);timer.unref();})]);
 test('four lesson rooms use financial topics and isolate one-point classification from passing labels', {timeout:25000},async()=>{
  const archive=await mkdtemp(path.join(tmpdir(),'financial-chat-test-'));
@@ -23,12 +27,12 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
  });
  ai.listen(0,'127.0.0.1');await once(ai,'listening');
  const allocator=createServer();allocator.listen(0,'127.0.0.1');await once(allocator,'listening');const port=allocator.address().port;await new Promise(r=>allocator.close(r));
- const child=spawn(process.execPath,['index.js'],{cwd:path.join(root,'server'),env:{...process.env,PORT:String(port),AI_SERVER_BASE:`http://127.0.0.1:${ai.address().port}`,CHAT_ARCHIVE_DIR:archive,DISCUSSION_QUESTIONS_DIR:path.join(root,'server/data/discussion_questions'),DB_HOST:'127.0.0.1',DB_NAME:'financial_contract_test',ROOM_MAX_AGE_MS:'600000',AI_MIN_SCORE:'0.6'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['index.js'],{cwd:path.join(root,'server'),env:{...process.env,JWT_SECRET:'teacher-socket-test',PORT:String(port),AI_SERVER_BASE:`http://127.0.0.1:${ai.address().port}`,CHAT_ARCHIVE_DIR:archive,DISCUSSION_QUESTIONS_DIR:path.join(root,'server/data/discussion_questions'),DB_HOST:'127.0.0.1',DB_NAME:'financial_contract_test',ROOM_MAX_AGE_MS:'600000',AI_MIN_SCORE:'0.6'},stdio:['ignore','pipe','pipe']});
  const sockets=[];let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
  try {
   for(let i=0;i<60;i++) {try {if((await fetch(`http://127.0.0.1:${port}/health`)).ok)break;}catch{}await new Promise(r=>setTimeout(r,80));}
   for(const round of [1,2,3,4]) {
-   const socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(socket);await event(socket,'connect');
+   let socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true,auth:{token:teacherToken}});sockets.push(socket);await event(socket,'connect');
    const recent=event(socket,'room:recent');socket.emit('room:join',{roomId:'financial-contract',round,videoId:round-1,isAdmin:true});await recent;
    await new Promise(resolve=>setTimeout(resolve,100));
    if(round===2){
@@ -41,6 +45,24 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
     socket.emit('reaction:toggle',{messageId:message.id,nickname:'contract-student'});
     assert.equal((await reaction).reactionsCount,1);
     assert.deepEqual(result.aiLabels,['위험인식']);assert.equal(result.aiScores['위험인식'],0.6);
+    const intruder=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(intruder);
+    await event(intruder,'connect');
+    let ended=false;socket.once('room:closing',()=>{ended=true;});
+    intruder.emit('room:end',{roomId:'financial-contract__r2',isAdmin:true});
+    await new Promise(resolve=>setTimeout(resolve,80));
+    assert.equal(ended,false,'unauthenticated client must not end class');
+    intruder.disconnect();
+    // A lone participant leaving/reloading must not erase submitted discussion.
+    socket.disconnect();
+    await new Promise(resolve=>setTimeout(resolve,80));
+    socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true,auth:{token:teacherToken}});sockets.push(socket);
+    await event(socket,'connect');
+    const restored=event(socket,'room:recent');
+    socket.emit('room:join',{roomId:'financial-contract',round,videoId:round-1,isAdmin:true});
+    const history=await restored;
+    assert.equal(history.messages.length,1,'last participant disconnect must preserve discussion');
+    assert.equal(history.messages[0].text,'매달 10만원을 모으겠습니다');
+
    }
    if(round===4) {
     for(let index=0;index<101;index++) {

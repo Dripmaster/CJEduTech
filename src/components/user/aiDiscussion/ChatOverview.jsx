@@ -20,7 +20,7 @@ const CAKES = { 1: cake1, 2: cake2, 3: cake3, 4: cake4 };
 const LABELS = ["금융이해", "계획성", "실천의지", "위험인식"];
 
 const getMyNick = () => {
-  const n = localStorage.getItem("nickname");
+  const n = sessionStorage.getItem("nickname");
   return n || "익명";
 };
 
@@ -212,7 +212,7 @@ export default function ChatOverView(){
         if (videoId !== undefined && videoId !== null) {
           setVideoId(videoId);
           sessionStorage.setItem('videoId', String(videoId));
-          localStorage.setItem('videoId', String(videoId));
+          sessionStorage.setItem('videoId', String(videoId));
         }
       } catch {}
     };

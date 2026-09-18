@@ -134,7 +134,7 @@ export default function DiscussionResultMain() {
   }, []);
   useEffect(() => {
     const rid = sessionStorage.getItem("lastRoomId") || "";
-    const nick = sessionStorage.getItem("myNickname") || localStorage.getItem("nickname") || "";
+    const nick = sessionStorage.getItem("myNickname") || sessionStorage.getItem("nickname") || "";
     setRoomId(rid);
     setMyNickname(nick);
 
