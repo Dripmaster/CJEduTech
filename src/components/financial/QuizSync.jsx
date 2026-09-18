@@ -1,4 +1,4 @@
-import {createContext, useContext, useEffect, useState} from 'react';
+import {createContext, useContext, useEffect, useState, useCallback} from 'react';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {syncTarget} from '../../contents/financial-course.js';
 import {socket} from '../../api/chat';
@@ -11,7 +11,7 @@ const entryPages = new Set(['/user/login', '/user/selectAvatar', '/user/end']);
 
 export default function QuizSync({children}) {
   const {isAdmin, nickname} = useUser();
-  const {round, step, setRound, setStep} = useRoundStep();
+  const {round, step, applyProgress} = useRoundStep();
   const {pathname} = useLocation();
   const navigate = useNavigate();
   const [connected, setConnected] = useState(false);
@@ -45,6 +45,7 @@ export default function QuizSync({children}) {
     socket.on('connect', onConnect);
     socket.on('disconnect', onDisconnect);
     socket.on('course:quiz', onQuiz);
+    socket.on('course:slide', onQuiz);
     window.addEventListener('online', onOnline);
     if (socket.connected) onConnect();
     return () => {
@@ -53,6 +54,7 @@ export default function QuizSync({children}) {
       socket.off('connect', onConnect);
       socket.off('disconnect', onDisconnect);
       socket.off('course:quiz', onQuiz);
+      socket.off('course:slide', onQuiz);
       window.removeEventListener('online', onOnline);
     };
   }, [isAdmin]);
@@ -65,10 +67,9 @@ export default function QuizSync({children}) {
     sessionStorage.setItem(HANDLED_KEY, state.commandId);
     const target = syncTarget(state, {round, step}, pending.live);
     if (!target) return;
-    setRound(state.round);
-    setStep(target.step);
+    applyProgress({round:state.round,step:target.step});
     navigate(`/user/${target.path}`, {replace:true});
-  }, [pending, isAdmin, nickname, pathname, round, step, setRound, setStep, navigate]);
+  }, [pending, isAdmin, nickname, pathname, round, step, applyProgress, navigate]);
 
   const startNext = lessonRound => new Promise((resolve, reject) => {
     if (!connected || !socket.connected) {
@@ -81,7 +82,15 @@ export default function QuizSync({children}) {
     });
   });
 
-  return <QuizSyncContext.Provider value={{connected, startNext}}>{children}</QuizSyncContext.Provider>;
+  const publishSlide = useCallback((lessonRound, page) => new Promise((resolve,reject) => {
+    if(!connected || !socket.connected) return reject(new Error('수업 서버에 연결 중입니다.'));
+    socket.timeout(5000).emit('course:slide',{round:lessonRound,page},(error,response)=>{
+      if(error || !response?.ok) reject(new Error(response?.error || '슬라이드 전환을 확인하지 못했습니다. 다시 시도해 주세요.'));
+      else {setPending({state:response.state,live:true});resolve(response.state);}
+    });
+  }),[connected]);
+
+  return <QuizSyncContext.Provider value={{connected, startNext, publishSlide, state:pending?.state}}>{children}</QuizSyncContext.Provider>;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- Provider and hook form one course control API.

@@ -37,6 +37,16 @@ test('teacher starts the quiz or video stage for 20 students, including reconnec
 
   const students=await Promise.all(Array.from({length:20},()=>connect()));
   assert.equal(students[0].state,null);
+  assert.equal((await ack(students[0].socket,'course:slide',{round:1,page:1})).ok,false);
+  assert.equal((await ack(teacher.socket,'course:slide',{round:1,page:9})).ok,false,'quiz page is not a theory slide');
+  for(const page of [1,2,3]) {
+   const updates=students.map(({socket})=>once(socket,'course:slide'));
+   const result=await ack(teacher.socket,'course:slide',{round:1,page});
+   assert.equal(result.ok,true);
+   for(const [state] of await Promise.all(updates)) assert.equal(state.page,page);
+  }
+  const late=await connect();
+  assert.equal(late.state.page,3);
   const received=students.map(({socket})=>{const list=[];socket.on('course:quiz',state=>list.push(state));return list;});
   let discussionEvents=0;
   students[0].socket.on('room:time',()=>discussionEvents++);
@@ -51,6 +61,7 @@ test('teacher starts the quiz or video stage for 20 students, including reconnec
    assert.equal(response.state.step,round <= 2 ? 2 : 3);
    assert.ok(response.state.commandId);
    for(const [state] of await Promise.all(deliveries))assert.deepEqual(state,response.state);
+   assert.equal((await ack(teacher.socket,'course:slide',{round,page:round===1?1:round===2?29:round===3?42:52})).ok,false,'late slides cannot overwrite started quiz/video');
    // Retrying a command keeps its identity so clients do not lose in-progress answers.
    const retryDeliveries=students.map(({socket})=>once(socket,'course:quiz'));
    const retried=await ack(teacher.socket,'course:start-quiz',{round});

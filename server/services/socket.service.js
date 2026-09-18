@@ -1,3 +1,4 @@
+import {activities} from '../data/course-content.js';
 // server/services/socket.service.js
 import {isTeacherSocket} from '../middlewares/teacher.js';
 import { randomUUID } from "crypto";
@@ -353,7 +354,7 @@ function serializeMessagesForArchive(roomId){
       id: m.id,
       roomId: m.roomId,
       baseRoomId: baseId,
-      round_number: round,
+      round_number: roomStates.get(roomId)?.roundNumber || round,
       nickname: m.nickname,
       avatarId: m.avatarId || m.avatar,
       text: m.text,
@@ -567,7 +568,7 @@ async function expireRoom(io, roomId) {
   const summaries = buildAndBroadcastSummaries(io, roomId);
   // Prepare personal feedback when the last lesson ends, without waiting for a
   // teacher to visit each student's dashboard. The shared AI queue bounds load.
-  if (Number(st.videoId) === DEFAULT_VIDEO_INDEX.length - 1) {
+  if (activities.find(a=>a.videoId===Number(st.videoId))?.lessonId === 4) {
     import('./review.service.js').then(mod => Promise.all(Object.keys(initial.perUser).map(nickname =>
       mod.generateMultiVideoFinalResult(roomId, nickname, DEFAULT_VIDEO_INDEX.map((_,i)=>i), {deferAI:true})
     ))).catch(error => console.warn('[Final pre-generation]', error.message));
@@ -1009,7 +1010,7 @@ async function classifyMessage(io, msg) {
         nickname: msg.nickname,
         roomId: msg.roomId,
         user_id:msg.nickname,
-        context: { lesson_id: decomposeRoomId(msg.roomId).round, discussion_topic: roomStates.get(msg.roomId)?.topic || "" }
+        context: { lesson_id: roomStates.get(msg.roomId)?.roundNumber || decomposeRoomId(msg.roomId).round, discussion_topic: roomStates.get(msg.roomId)?.topic || "" }
       })
     });
     if (!res.ok) throw new Error(`AI classify http ${res.status}`);
@@ -1120,7 +1121,7 @@ export function initChatSocket(io) {
 
       // ensure room state exists & save current video id (do not override once set)
       const stForJoin = getRoomState(composed);
-      stForJoin.roundNumber = Number(round);
+      stForJoin.roundNumber = activities.find(a=>a.videoId===Number(round)-1)?.lessonId || Number(round);
       if (isAdmin) {
         const incomingHas = (videoId !== undefined && videoId !== null);
         const alreadyHas = (typeof stForJoin.videoId !== 'undefined');

@@ -68,6 +68,7 @@ import avatar12 from "@/assets/images/avatar/avatar12.png";
 
 export default function DiscussionResultMain() {
     const { round, setRound, step, setStep,videoId,setVideoId } = useRoundStep();
+    const resultRound = useRef(round).current;
     const avatars = [
       { id: '1', src: avatar1 },
       { id: '2', src: avatar2 },
@@ -127,7 +128,7 @@ export default function DiscussionResultMain() {
     const observer = observeResult({
       load:signal => {
         if (!rid) throw new Error('roomId_missing');
-        return http.get(`/api/chat/result/${encodeURIComponent(rid)}`, {}, {signal});
+        return http.get(`/api/chat/lesson-result/${encodeURIComponent(rid)}/${resultRound}`, {}, {signal});
       },
       onData:result => {
         setRoomResult(result); setLoading(false); setError('');
@@ -146,13 +147,13 @@ export default function DiscussionResultMain() {
       isPending:result => result.classification?.status === 'pending' ||
         result.topicSummaries?.status === 'pending' || result.overallSummaryStatus === 'pending',
     });
-    const refresh = ({roomId:changed} = {}) => {if (!changed || changed === rid) observer.refresh();};
+    const refresh = ({roomId:changed} = {}) => {if (!changed || changed.split('__r')[0] === rid.split('__r')[0]) observer.refresh();};
     for (const event of ['topics:ready','overallSummary:ready','results:updated','connect']) socket.on(event,refresh);
     return () => {
       observer.stop();
       for (const event of ['topics:ready','overallSummary:ready','results:updated','connect']) socket.off(event,refresh);
     };
-  }, [refreshVersion]);
+  }, [refreshVersion, resultRound]);
 
   // Aggregate totals for hero copy (전체)
   const heroTotals = useMemo(() => {
@@ -424,8 +425,8 @@ function koreanOrdinal(n){
   const ordinalText = useMemo(() => {
     const n = Number(videoId);
     if (!Number.isFinite(n)) return '';
-    return koreanOrdinal(n + 1); // videoId가 0부터 시작하므로 +1
-  }, [videoId]);
+    return `${round}차시`;
+  }, [videoId, round]);
 
   if (loading) {
     return (
@@ -467,7 +468,7 @@ function koreanOrdinal(n){
                 {overallSummary ? 
                   overallSummary
                  : 
-                  (summaryStatus === 'pending' ? 'AI 총평을 작성 중입니다. 준비되는 대로 표시됩니다.' : summaryStatus === 'error' ? 'AI 총평을 불러오지 못했습니다. 기본 결과는 확인할 수 있습니다.' : '요약할 발언이 없습니다.')
+                  (summaryStatus === 'pending' ? 'AI 총평을 작성 중입니다. 준비되는 대로 표시됩니다.' : ['error','partial'].includes(summaryStatus) ? '일부 AI 총평을 불러오지 못했습니다. 기본 결과는 확인할 수 있습니다.' : '요약할 발언이 없습니다.')
                 }
               </div>
             </div>

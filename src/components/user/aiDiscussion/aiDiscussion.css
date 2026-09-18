@@ -33,7 +33,7 @@
 .ai-discussion-main {
   /* Design-size stage (will be scaled by parent) */
   width: calc(var(--design-w) * 1px);
-  height: calc(var(--design-h) * 1px);
+  height: min(calc(var(--design-h) * 1px), calc((100vh - 100px) / 0.75));
   box-sizing: border-box;
   padding: 16px;                 /* keep design padding */
   display: flex;
@@ -45,7 +45,7 @@
   will-change: transform;
 }
 @media (max-height: 800px){
-  .ai-discussion-main{ zoom: 0.65;}
+  .ai-discussion-main{ zoom: 0.65; height: min(calc(var(--design-h) * 1px), calc((100vh - 100px) / 0.65)); }
 
 }
 /* 왼쪽 개요 영역 */
@@ -178,6 +178,10 @@ letter-spacing: 0.379px;
   position: relative;
   overflow: hidden;          /* child scroller below */
 }
+
+/* Complete discussion prompts must remain visible without opening the guide. */
+.chat-container .page-header-short { flex-shrink: 0; align-items: flex-start; }
+.chat-container .page-header-short .title { font-size: clamp(18px, 1.5vw, 28px); overflow-wrap: anywhere; }
 
 /* AI tip callout (orange card on the right) */
 .ai-chat {
