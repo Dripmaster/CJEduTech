@@ -1,4 +1,6 @@
 // src/lib/http.js
+import { TOKEN_KEY } from './tab-session.js';
+
 const API_BASE = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 async function request(path, opts = {}) {
@@ -6,7 +8,7 @@ async function request(path, opts = {}) {
     method = 'GET',
     headers = {},
     body = undefined,
-    credentials = 'include',
+    credentials = 'omit',
   } = opts;
 
   const url = `${API_BASE}${path}`;
@@ -15,7 +17,7 @@ async function request(path, opts = {}) {
     method,
     mode: 'cors',
     credentials,
-    headers: { ...headers },
+    headers: { ...headers, ...(sessionStorage.getItem(TOKEN_KEY) ? { Authorization: `Bearer ${sessionStorage.getItem(TOKEN_KEY)}` } : {}) },
   };
 
   const isPlainObject = body && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof ArrayBuffer);

@@ -1,4 +1,4 @@
-import {createContext, useContext, useEffect, useRef, useState} from 'react';
+import {createContext, useContext, useEffect, useState} from 'react';
 import {useLocation, useNavigate} from 'react-router-dom';
 import {syncTarget} from '../../contents/financial-course.js';
 import {socket} from '../../api/chat';
@@ -16,7 +16,6 @@ export default function QuizSync({children}) {
   const navigate = useNavigate();
   const [connected, setConnected] = useState(false);
   const [pending, setPending] = useState(null);
-  const handled = useRef(sessionStorage.getItem(HANDLED_KEY));
 
   useEffect(() => {
     let active = true;
@@ -62,8 +61,7 @@ export default function QuizSync({children}) {
     const state = pending?.state;
     if (isAdmin || !nickname || !pathname.startsWith('/user/') || entryPages.has(pathname)) return;
     if (!state?.commandId || !Number.isInteger(state.round) || state.round < 1 || state.round > 4) return;
-    if (handled.current === state.commandId) return;
-    handled.current = state.commandId;
+    if (sessionStorage.getItem(HANDLED_KEY) === state.commandId) return;
     sessionStorage.setItem(HANDLED_KEY, state.commandId);
     const target = syncTarget(state, {round, step}, pending.live);
     if (!target) return;

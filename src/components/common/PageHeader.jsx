@@ -2,6 +2,7 @@
 
 import { useUser } from '@/contexts/UserContext';
 import './PageHeader.css';
+import LeaveButton from './LeaveButton';
 
 function getAvatarSrc(avatarNumber) {
   if (!avatarNumber) return '';
@@ -18,6 +19,7 @@ export default function PageHeader({ title, isShort }) {
       <div className="user-info">
         {avatarUrl && <img src={getAvatarSrc(avatarUrl)} alt="avatar" className="avatar-icon" />}
         {nickname && <span className="nickname">{nickname}</span>}
+        <LeaveButton />
       </div>
     </div>
   );

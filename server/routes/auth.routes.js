@@ -13,13 +13,19 @@ router.use(cookieParser());
 
 const loginSchema = z.object({
   nickname: z.string().min(1),
-  password: z.string().min(1)
+  password: z.string().min(1),
+  tabSession: z.boolean().optional()
 });
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { nickname, password } = loginSchema.parse(req.body);
+    const { nickname, password, tabSession } = loginSchema.parse(req.body);
     const { token, user } = await loginOrSignup({ nickname, password });
+
+    if (tabSession) {
+      res.set('Cache-Control', 'no-store');
+      return res.json({ user, token });
+    }
 
     // httpOnly 쿠키로 발급 (프론트 JS에서 직접 접근 불가 → 보안상 이점)
     res.cookie('token', token, {

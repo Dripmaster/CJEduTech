@@ -1,3 +1,4 @@
+import LeaveButton from '../common/LeaveButton';
 import { useState, useEffect } from 'react';
 import { socket } from '../../api/chat';
 import { useUser } from '../../contexts/UserContext';
@@ -22,6 +23,7 @@ export default function DiscussionPage() {
     {started && <AiDiscussionMain/>}
     {!connected && <div role="status" className="finance-connection">토론 서버에 연결 중입니다.</div>}
     <div className="finance-discussion-controls">
+      <LeaveButton />
       <button onClick={()=>setShowGuide(true)}>토론 주제 보기</button>
       {isAdmin && <><button disabled={!connected} onClick={()=>socket.emit('room:next',{dir:-1})}>이전 주제</button><button disabled={!connected} onClick={()=>socket.emit('room:next',{})}>다음 주제</button><button disabled={!connected} onClick={()=>socket.emit('ai:ment:request',{})}>AI 참여 안내</button><button disabled={!connected} onClick={()=>socket.emit('room:end',{})}>토론 종료</button></>}
     </div>

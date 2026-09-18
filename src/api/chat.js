@@ -7,7 +7,7 @@ const SOCKET_URL = (import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_
 export const socket = io(`${SOCKET_URL}/chat`, {
   path: '/socket.io',
   transports: ['websocket', 'polling'],
-  withCredentials: true,
+  withCredentials: false,
   reconnection: true,
   reconnectionAttempts: 10,
   reconnectionDelay: 800,

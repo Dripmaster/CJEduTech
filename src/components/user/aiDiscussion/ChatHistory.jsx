@@ -15,10 +15,10 @@ function generateRandomNickname() {
 
 export default function ChatHistory({ onTopicChange = () => {} }) {
   const [myNick] = useState(() => {
-    let storedNick = localStorage.getItem("nickname");
+    let storedNick = sessionStorage.getItem("nickname");
     if (!storedNick) {
       storedNick = generateRandomNickname();
-      localStorage.setItem("nickname", storedNick);
+      sessionStorage.setItem("nickname", storedNick);
     }
     return storedNick;
   });

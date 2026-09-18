@@ -28,7 +28,7 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
  try {
   for(let i=0;i<60;i++) {try {if((await fetch(`http://127.0.0.1:${port}/health`)).ok)break;}catch{}await new Promise(r=>setTimeout(r,80));}
   for(const round of [1,2,3,4]) {
-   const socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(socket);await event(socket,'connect');
+   let socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(socket);await event(socket,'connect');
    const recent=event(socket,'room:recent');socket.emit('room:join',{roomId:'financial-contract',round,videoId:round-1,isAdmin:true});await recent;
    await new Promise(resolve=>setTimeout(resolve,100));
    if(round===2){
@@ -41,6 +41,17 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
     socket.emit('reaction:toggle',{messageId:message.id,nickname:'contract-student'});
     assert.equal((await reaction).reactionsCount,1);
     assert.deepEqual(result.aiLabels,['위험인식']);assert.equal(result.aiScores['위험인식'],0.6);
+    // A lone participant leaving/reloading must not erase submitted discussion.
+    socket.disconnect();
+    await new Promise(resolve=>setTimeout(resolve,80));
+    socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(socket);
+    await event(socket,'connect');
+    const restored=event(socket,'room:recent');
+    socket.emit('room:join',{roomId:'financial-contract',round,videoId:round-1,isAdmin:true});
+    const history=await restored;
+    assert.equal(history.messages.length,1,'last participant disconnect must preserve discussion');
+    assert.equal(history.messages[0].text,'매달 10만원을 모으겠습니다');
+
    }
    if(round===4) {
     for(let index=0;index<101;index++) {

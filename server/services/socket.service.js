@@ -384,6 +384,10 @@ function cleanupRoomIfEmpty(io, roomId) {
     clearTimeout(st.expireTimer);
   }
 
+  // Leaving/reloading is not ending a lesson. Keep submitted messages and
+  // topic state until the teacher ends it (or the operator resets the service).
+  if (!st?.isClosing) return false;
+
   // remove per-user cooldown map etc.
   roomStates.delete(roomId);
 
@@ -1510,6 +1514,7 @@ function startMentorScheduler(io) {
   setInterval(() => {
     const now = Date.now();
     for (const [roomId, st] of roomStates.entries()) {
+      if (!io.of('/chat').adapter.rooms.get(`room:${roomId}`)?.size) continue;
       // 만료된 방은 즉시 만료 처리 후 continue
       // ⏱ 시연용: 만료시간을 현재 기준으로 계속 연장
       

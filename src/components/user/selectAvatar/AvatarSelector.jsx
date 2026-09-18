@@ -7,9 +7,11 @@ import BackButton from "./BackButton";
 import StartButton from "./StartButton";
 
 import './selectAvatar.css';
+import LeaveButton from '../../common/LeaveButton';
+import { http } from '@/lib/http';
 
 // API 유틸 (http.js 기반)
-const API = import.meta.env.VITE_API_URL;
+
 
 export default function AvatarSelector() {
   const [selected, setSelected] = useState(null); // '1'..'12' 문자열 또는 null
@@ -21,9 +23,7 @@ export default function AvatarSelector() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API}/api/user/me`, { credentials: 'include' });
-        if (!res.ok) return; // 비로그인 등은 조용히 무시
-        const data = await res.json();
+        const data = await http.get('/api/user/me');
         if (data?.user?.avatar) setSelected(String(data.user.avatar));
       } catch (_) {}
     })();
@@ -38,19 +38,9 @@ export default function AvatarSelector() {
     setSaving(true);
     setMsg('');
     console.log('avatar:',String(selected));
-    localStorage.setItem('avatarUrl', String(selected));
+    sessionStorage.setItem('avatarUrl', String(selected));
     try {
-      const res = await fetch(`${API}/api/user/avatar`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ avatar: String(selected) }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMsg(body?.message || '저장에 실패했습니다.');
-        return;
-      }
+      await http.post('/api/user/avatar', { avatar: String(selected) });
       setAvatarUrl(String(selected));
 
       setMsg('아바타가 저장되었습니다!');
@@ -70,6 +60,7 @@ export default function AvatarSelector() {
 
               <div className="action-buttons">
                   <BackButton/>
+                  <LeaveButton/>
                   <StartButton onSelect={saveAvatar} />
               </div>
     </div>
