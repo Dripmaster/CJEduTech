@@ -1,3 +1,4 @@
+import {afterDiscussion} from '../../../contents/financial-course.js';
 import badge1 from '@/assets/images/discussion/badge_1.png';
 import badge2 from '@/assets/images/discussion/badge_2.png';
 import badge3 from '@/assets/images/discussion/badge_3.png';
@@ -27,7 +28,7 @@ const getMyNick = () => {
 export default function ChatOverView(){
   
       const {isAdmin, setIsAdmin} = useUser();
-      const { round, setRound, step, setStep,videoId,setVideoId } = useRoundStep();
+      const { round, setRound, step, setStep,videoId,setVideoId,applyProgress } = useRoundStep();
   const [totals, setTotals] = useState({
     금융이해: 0,
     계획성: 0,
@@ -230,8 +231,9 @@ export default function ChatOverView(){
       } catch {}
 
       const go = () => {
-        setStep(5);
-        navigate(isAdmin ? '/admin/discussionResult' : '/user/discussionResult');
+        const target=afterDiscussion(round,videoId);
+        applyProgress(target);
+        navigate(`/${isAdmin?'admin':'user'}/${target.path}`);
       };
 
       // Admin은 즉시 이동, 일반 사용자는 5초 대기 후 이동
@@ -259,7 +261,7 @@ export default function ChatOverView(){
         delayTimerRef.current = null;
       }
     };
-  }, [isAdmin]);
+  }, [isAdmin, round, videoId, applyProgress]);
 
   // cake stacking: 1..4 → cake_1..cake_4, then add another layer for 5..8 (4 per layer)
   const renderCakes = (count, variant) => {

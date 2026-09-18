@@ -24,7 +24,7 @@ for (const archiveFailure of [false,true]) test(archiveFailure ? 'archive failur
   const body=JSON.parse(text||'{}');res.setHeader('content-type','application/json');
   const classified=()=>res.end(JSON.stringify({cj_values:{계획성:90},primary_trait:'계획성',evaluation_status:'assessed'}));
   if(req.url==='/classify-gpt') {if(body.nickname==='late')classificationResponse=classified;else classified();}
-  else if(req.url==='/user-summary') held.push({body,finish:()=>res.end(JSON.stringify({topics:[{topic:'기초적 노후 생활',relevance_score:0.9,summary:`${body.user_id}의 계획`}]}))});
+  else if(req.url==='/user-summary') held.push({body,finish:()=>res.end(JSON.stringify({topics:[{topic:body.discussion_topics[0].name,relevance_score:0.9,summary:`${body.user_id}의 계획`}]}))});
   else if(req.url==='/discussion-overall')res.end(JSON.stringify({discussion_summary:'토론 총평'}));
   else if(req.url==='/evaluate'){evaluations++;res.end(JSON.stringify({personalized_feedback:'개인 피드백'}));}
   else res.end(JSON.stringify({message:'',question:'결과없음'}));
@@ -37,13 +37,13 @@ for (const archiveFailure of [false,true]) test(archiveFailure ? 'archive failur
  try {
   await until(async()=>{try{return (await fetch(`http://127.0.0.1:${port}/health`)).ok;}catch{return false;}});
   socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true,auth:{token:jwt.sign({uid:'teacher',role:'admin'},'result-test')}});
-  await event(socket,'connect');const recent=event(socket,'room:recent');socket.emit('room:join',{roomId:'updates',round:4,videoId:3,isAdmin:true});await recent;
+  await event(socket,'connect');const recent=event(socket,'room:recent');socket.emit('room:join',{roomId:'updates',round:3,videoId:2,isAdmin:true});await recent;
   for(const nickname of ['first','second','late']) {
-   const posted=event(socket,'message:new');socket.emit('message:send',{roomId:'updates',round:4,text:`${nickname} 저축 계획`,nickname});await posted;
+   const posted=event(socket,'message:new');socket.emit('message:send',{roomId:'updates',round:3,text:`${nickname} 저축 계획`,nickname});await posted;
   }
   await until(()=>classificationResponse);
   const ready=event(socket,'results:ready');socket.emit('room:end',{});await ready;
-  const read=()=>fetch(`http://127.0.0.1:${port}/api/chat/result/updates__r4`).then(r=>r.json());
+  const read=()=>fetch(`http://127.0.0.1:${port}/api/chat/result/updates__r3`).then(r=>r.json());
   const basic=await read();
   assert.equal(basic.perUser.late.totalMessages,1);
   assert.equal(basic.classification.status,'pending');
@@ -76,7 +76,7 @@ for (const archiveFailure of [false,true]) test(archiveFailure ? 'archive failur
   }
   const firstCompletion=(await read()).createdAt;
   const rejoined=event(socket,'room:recent');
-  socket.emit('room:join',{roomId:'updates',round:4,videoId:3,isAdmin:true});await rejoined;
+  socket.emit('room:join',{roomId:'updates',round:3,videoId:2,isAdmin:true});await rejoined;
   const endedAgain=event(socket,'room:expired');socket.emit('room:end',{});await endedAgain;
   assert.ok((await read()).createdAt > firstCompletion,'a new completion must have a new archive identity');
   const repeatedFiles=await readdir(archive);

@@ -8,6 +8,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {once} from 'node:events';
 import {io} from 'socket.io-client';
+import {activities} from '../src/contents/financial-course.js';
 const root=new URL('../',import.meta.url).pathname;
 const require=createRequire(new URL('../server/package.json',import.meta.url));
 const jwt=require('jsonwebtoken');
@@ -73,17 +74,22 @@ test('four lesson rooms use financial topics and isolate one-point classificatio
    }
    const expired=event(socket,'room:expired');socket.emit('room:end',{});await expired;socket.disconnect();
   }
+  const combined=await fetch(`http://127.0.0.1:${port}/api/chat/lesson-result/financial-contract__r4/3`).then(r=>r.json());
+  assert.equal(combined.perUser['contract-student'].totalMessages,1);
+  assert.equal(combined.perUser['early-student'].totalMessages,1);
+  assert.equal(combined.perUser['later-student'].totalMessages,100);
+  assert.equal(combined.ranking.length,3);
   const files=await readdir(archive);const archives=[];
   for(const file of files.filter(f=>f.endsWith('.json'))) archives.push(JSON.parse(await readFile(path.join(archive,file),'utf8')));
-  assert.equal(new Set(archives.map(a=>a.round_number)).size,4);
-  const firstTopics=['목표 정하기','현재 점검','진단','기초적 노후 생활'];
-  for(const item of archives) assert.equal(item.topic,firstTopics[item.round_number-1]);
-  const fourth=archives.find(a=>a.round_number===4);
+  assert.equal(new Set(archives.map(a=>a.round_number)).size,3);
+  const firstTopics=activities.map(activity=>activity.topics[0]);
+  for(const item of archives) assert.equal(item.topic,firstTopics[item.video_id_index]);
+  const fourth=archives.find(a=>a.video_id_index===3);
   assert.equal(fourth.messages.length,101);
   assert.equal(fourth.perUser['early-student'].totalMessages,1);
   assert.equal(fourth.perUser['early-student'].labels['위험인식'],1);
   assert.ok(fourth.ranking.some(row=>row.nickname==='early-student'));
-  const classify=requests.find(r=>r.url==='/classify-gpt');assert.equal(classify.body.user_id,'contract-student');assert.equal(classify.body.context.lesson_id,2);
+  const classify=requests.find(r=>r.url==='/classify-gpt');assert.equal(classify.body.user_id,'contract-student');assert.equal(classify.body.context.lesson_id,3);
   assert.deepEqual([...new Set(archives.map(a=>a.video_id_key))].sort(),['financial_1','financial_2','financial_3','financial_4']);
  } catch(error){error.message+='\n'+output.slice(-3000);throw error;}
  finally {for(const socket of sockets)socket.disconnect();child.kill('SIGTERM');await once(child,'exit');await new Promise(r=>ai.close(r));await rm(archive,{recursive:true,force:true});}

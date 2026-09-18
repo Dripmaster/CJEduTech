@@ -1,3 +1,4 @@
+import quizResponses from './quiz-responses.routes.js';
 
 
 // server/routes/quiz.routes.js
@@ -10,6 +11,7 @@ const router = Router();
 
 // 모든 퀴즈 관련 라우트는 인증 필요
 router.use(authRequired);
+router.use('/responses',quizResponses);
 
 // GET /api/quiz/scores/me -> 현재 사용자 점수 조회
 router.get('/scores/me', async (req, res, next) => {

@@ -6,7 +6,8 @@ export default function ChatInput() {
   const [text, setText] = useState("");
   const [isComposing, setIsComposing] = useState(false);
 
-    const { round, setRound, step, setStep } = useRoundStep();
+    const { videoId } = useRoundStep();
+    const round=videoId+1;
   const send = () => {
     if (!text.trim()) return;
     const nickname = sessionStorage.getItem("nickname") || "익명";

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useRoundStep } from '../../contexts/RoundStepContext';
 import { useUser } from '../../contexts/UserContext';
-import { getLesson } from '../../contents/financial-course.js';
+import { getActivity } from '../../contents/financial-course.js';
 import PageHeader from '../../components/common/PageHeader';
 import '../../components/user/video/video.css';
 import '../../components/financial/course.css';
@@ -26,14 +26,15 @@ function StudentVideoGuide({ title, onNext }) {
   </div>;
 }
 export default function VideoPage() {
-  const { round, setStep } = useRoundStep();
+  const { round, videoId, setStep } = useRoundStep();
   const { isAdmin } = useUser();
   const navigate = useNavigate();
-  const lesson = getLesson(round);
+  const lesson = videoId === null ? null : getActivity(videoId);
   const [error, setError] = useState(false);
-  const configured = import.meta.env[`VITE_FINANCIAL_VIDEO_${round}`] || lesson.videoSrc;
+  const configured = import.meta.env[`VITE_FINANCIAL_VIDEO_${videoId+1}`] || lesson?.videoSrc;
   const next = () => {setStep(4);navigate(`/${isAdmin?'admin':'user'}/aiDiscussion`);};
-  if (!isAdmin) return <StudentVideoGuide key={round} title={`${round}차시 · ${lesson.videoTitle} · 영상`} onNext={next}/>;
+  if (!lesson) return <Navigate to={`/${isAdmin?'admin':'user'}/slide`} replace/>;
+  if (!isAdmin) return <StudentVideoGuide key={videoId} title={`${round}차시 · ${lesson.videoTitle} · 영상`} onNext={next}/>;
   return <div className="video-page">
     <PageHeader title={`${round}차시 · ${lesson.videoTitle} · 영상`}/>
     <main className="video-main">

@@ -1,41 +1,77 @@
-import { lessons } from './financial-course-data.js';
-export { lessons };
+import { lessons, activities } from './financial-course-data.js';
+export { lessons, activities };
 export const AXES = ['금융이해', '위험인식', '계획성', '실천의지'];
 export const STEPS = ['이론', '퀴즈', '영상', '토론', '중간 대시보드'];
-export const PROGRESS_KEY = 'financial-education.progress.v1';
+export const PROGRESS_KEY = 'financial-education.progress.v2';
 export function getLesson(round) {
   const lesson = lessons.find(item => item.id === Number(round));
   if (!lesson) throw new RangeError('차시는 1~4여야 합니다.');
   return lesson;
 }
-// Internal step IDs stay stable for saved progress and discussion components.
+export function getActivity(videoId) {
+  const activity = activities.find(item => item.videoId === videoId);
+  if (!activity) throw new RangeError('알 수 없는 영상 활동입니다.');
+  return activity;
+}
+export function theoryPages(round) {
+  const pages = getLesson(round).theoryPages;
+  return round === 1 ? [1,2,3,4,...pages] : pages;
+}
+export function lessonProgress(round, step = 1) {
+  return {round, step, videoId:getLesson(round).activityIds[0] ?? null};
+}
+// Step IDs stay stable; video IDs identify activities independently of lessons.
 export function afterTheory(round) {
   return getLesson(round).quizEnabled
     ? {step: 2, path: 'quiz', label: '퀴즈'}
     : {step: 3, path: 'video', label: '영상'};
 }
+export function afterQuiz(round) {
+  if (!getLesson(round).activityIds.length) return {...lessonProgress(round+1),path:'slide',label:`${round+1}차시 이론`};
+  return {...lessonProgress(round,3),path:'video',label:'영상'};
+}
+export function afterDiscussion(round, videoId) {
+  const ids=getLesson(round).activityIds;
+  const index=ids.indexOf(videoId);
+  if(index<0) throw new RangeError('현재 차시의 토론이 아닙니다.');
+  const next=ids[index+1];
+  return next === undefined
+    ? {round,step:5,videoId,path:'discussionResult',label:'중간 대시보드'}
+    : {round,step:3,videoId:next,path:'video',label:getActivity(next).videoTitle};
+}
 export function lessonSteps(round) {
+  const lesson=getLesson(round);
   return STEPS.map((label, index) => ({step: index + 1, label}))
-    .filter(item => item.step !== 2 || getLesson(round).quizEnabled);
+    .filter(item => (item.step !== 2 || lesson.quizEnabled) && (item.step < 3 || lesson.activityIds.length));
 }
 export function syncTarget(state, progress, live) {
   if (!state?.commandId || !Number.isInteger(state.round) || state.round < 1 || state.round > 4) return null;
+  if(state.step === 1) {
+    if(!theoryPages(state.round).includes(state.page)) return null;
+    // Late slide packets must not rewind a student already doing this lesson's quiz/video.
+    if(progress.round === state.round && progress.step > 1) return null;
+    if(!live && progress.round > state.round) return null;
+    return {step:1,path:'slide',label:'이론'};
+  }
   const target = afterTheory(state.round);
-  // Reconnects catch up students still in theory, but never rewind later stages.
   if (!live && (progress.round > state.round || (progress.round === state.round && progress.step >= target.step))) return null;
   return target;
 }
 export function nextLesson(round) {
   const current = getLesson(round);
-  if (current.id === 4) return { round: 4, step: 5, videoId: 3, final: true };
-  return { round: current.id + 1, step: 1, videoId: current.id, final: false };
+  if (current.id === 4) return {...lessonProgress(4,5), final:true};
+  return {...lessonProgress(current.id+1),final:false};
 }
 export function restoreProgress(raw) {
-  const initial = { round: 1, step: 1, videoId: 0 };
+  const initial = lessonProgress(1);
   try {
     const value = JSON.parse(raw);
     if (!value || !Number.isInteger(value.round) || !Number.isInteger(value.step) || value.step < 1 || value.step > 5) return initial;
-    return { round: getLesson(value.round).id, step: value.step === 2 ? afterTheory(value.round).step : value.step, videoId: value.round - 1 };
+    const lesson=getLesson(value.round);
+    let step=value.step;
+    if(step===2 && !lesson.quizEnabled) step=3;
+    if(step>=3 && !lesson.activityIds.length) return lessonProgress(value.round+1);
+    return {round:lesson.id,step,videoId:lesson.activityIds.includes(value.videoId)?value.videoId:lesson.activityIds[0]??null};
   } catch { return initial; }
 }
 export function scoreQuiz(round, answers) {

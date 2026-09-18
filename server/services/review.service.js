@@ -1,3 +1,4 @@
+import {groupVideoRows} from './lesson-results.js';
 // server/services/review.service.js
 import { getRoomSnapshot } from './socket.service.js';
 import { listRoomArchives } from './socket.service.js';
@@ -350,6 +351,8 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
       totalMessages: sec.overall?.totalMessages || 0,
       totalReactions: sec.overall?.totalReactions || 0,
       score: sec.overall?.score || 0,
+      myMessages: (sec.ranking||[]).find(r=>r.nickname===nickname)?.totalMessages||0,
+      myReactions: (sec.ranking||[]).find(r=>r.nickname===nickname)?.totalReactions||0,
     });
 
     // mine per video from per-result ranking
@@ -400,9 +403,7 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
     counts: mergedLabelsMine,
     percentages: Object.fromEntries(Object.entries(mergedLabelsMine).map(([k,v])=>[k, Math.round((v/totalLabelSumMine2)*1000)/10]))
   };
-  const personaByRoundMine = Array.isArray(personaByVideoMine)
-    ? personaByVideoMine.map((v, idx) => ({ round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1, labels: { ...(v.labels || {}) } }))
-    : [];
+  const personaByRoundMine = groupVideoRows(personaByVideoMine,'labels');
 
   const overall = {
     rank: me?.rank ?? null,
@@ -411,19 +412,7 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
     totalReactions,
   };
 
-  // Derive round-shaped arrays from video-based arrays (to avoid client-side mock fallbacks)
-  const personaByRound = Array.isArray(personaByVideo) ? personaByVideo.map((v, idx) => ({
-    round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
-    labels: { ...(v.labels || {}) },
-  })) : [];
-
-  const participationByRound = Array.isArray(participationByVideo) ? participationByVideo.map((v, idx) => ({
-    round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
-    totalMessages: Number(v.totalMessages || 0),
-    totalReactions: Number(v.totalReactions || 0),
-    myMessages: Number(v.myMessages || 0),
-    myReactions: Number(v.myReactions || 0),
-  })) : [];
+  const participationByRound = groupVideoRows(participationByVideo,'participation');
 
   const top3Statements = [...myMessages]
     .sort((a,b) => (b.reactionsCount || 0) - (a.reactionsCount || 0)).slice(0,3)

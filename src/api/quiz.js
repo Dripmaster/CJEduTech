@@ -6,6 +6,10 @@
 import { http } from '@/lib/http';
 
 export const quizApi = {
+  getResponse: round => http.get(`/api/quiz/responses/${round}`),
+  saveDraft: (round, answers) => http.put(`/api/quiz/responses/${round}`, {answers}),
+  submitAnswers: (round, answers) => http.post(`/api/quiz/responses/${round}/submit`, {answers}),
+  getClassResponses: round => http.get(`/api/quiz/responses/${round}/class`),
   /** 내(로그인 유저) 점수 조회 */
   getMyScores: () => http.get('/api/quiz/scores/me'),
 

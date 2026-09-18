@@ -11,7 +11,7 @@ export default function DiscussionResultPage(){
 
     return (
         <div className = "discussion-result-page">
-            <PageHeader title={"Round"+round+" 토론 결과"} />
+            <PageHeader title={`${round}차시 중간 대시보드`} />
             <DiscussionResultMain/>
         </div>
     );

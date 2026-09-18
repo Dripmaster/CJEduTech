@@ -1,4 +1,4 @@
-import { lessons, quizResults } from '../../contents/financial-course.js';
+import { activities, getActivity, quizResults } from '../../contents/financial-course.js';
 import badgeJustice from '@/assets/images/discussion/badge_1.png';
 import badgePassion from '@/assets/images/discussion/badge_2.png';
 import badgeRespect from '@/assets/images/discussion/badge_4.png';
@@ -97,17 +97,21 @@ export default function FinalResultPage() {
         const retryAI = firstRequest && refreshVersion > 0;
         firstRequest = false;
         return http.post(`/api/review/${encodeURIComponent(roomId)}/multi-final-result`, {
-          nickname:effectiveNick || '', videoIds:lessons.map(lesson=>lesson.videoId), deferAI:true, retryAI,
+          nickname:effectiveNick || '', videoIds:activities.map(activity=>activity.videoId), deferAI:true, retryAI,
         }, {}, {signal});
       },
-      onData:result => {setData(result); setLoading(false); setError('');},
+      onData:result => {
+        setData(result); setLoading(false); setError('');
+        const students=result.sections?.ranking||[];
+        if(isAdminEffective && students.length) setAdminTargetNick(current=>students.some(row=>row.nickname===current)?current:students[0].nickname);
+      },
       onError:(_error, retrying) => {
         if (!retrying) {setLoading(false); setError('결과 갱신이 중단되었습니다. 다시 시도해 주세요.');}
       },
       isPending:result => result.sections?.aiSummaryStatus === 'pending' || result.sections?.classification?.status === 'pending',
     });
     return () => observer.stop();
-  }, [roomId, effectiveNick, refreshVersion]);
+  }, [roomId, effectiveNick, refreshVersion, isAdminEffective]);
 
   // Quiz results are independent of the AI summary and dashboard request.
   useEffect(() => {
@@ -133,14 +137,14 @@ export default function FinalResultPage() {
 
     const personaByRoundFromVideo = Array.isArray(personaByVideo) && personaByVideo.length
       ? personaByVideo.map((v, idx) => ({
-          round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
+          round_number: getActivity(Number(v.video)).lessonId,
           labels: { ...(v.labels || {}) },
         }))
       : [];
 
     const participationByRoundFromVideo = Array.isArray(participationByVideo) && participationByVideo.length
       ? participationByVideo.map((v, idx) => ({
-          round_number: Number.isInteger(Number(v.video)) ? Number(v.video) + 1 : idx + 1,
+          round_number: getActivity(Number(v.video)).lessonId,
           totalMessages: Number(v.totalMessages || 0),
           totalReactions: Number(v.totalReactions || 0),
           // myMessages / myReactions are not provided per-video; keep 0 so chart renders without mock fallback
@@ -471,7 +475,7 @@ export default function FinalResultPage() {
         const traitLabels = ['금융이해','위험인식','실천의지','계획성'];
         const colorPool = [C.round1, C.round2, C.round3, '#9b59b6', '#16a085'];
         const datasets = (personaByRound || []).map((r, idx) => ({
-          label: `R${r.round_number ?? (idx+1)}`,
+          label: `${r.round_number ?? (idx+1)}차시`,
           data: traitLabels.map(t => Number(r?.labels?.[t] || 0)),
           borderColor: colorPool[idx % colorPool.length],
           backgroundColor: colorPool[idx % colorPool.length],
@@ -501,7 +505,7 @@ export default function FinalResultPage() {
       const barsCtx = barsRef.current?.getContext('2d');
       if (barsCtx){
         barsChartRef.current?.destroy?.();
-        const labels = (participation || []).map((r, idx) => `토론 ${r.round_number ?? (idx+1)}`);
+        const labels = (participation || []).map((r, idx) => `${r.round_number ?? (idx+1)}차시`);
         const myArr = (participation || []).map(r => Number(r?.myMessages || 0));
         const totArr = (participation || []).map(r => Number(r?.totalMessages || 0));
         const useMine = myArr.some(v => v > 0);
