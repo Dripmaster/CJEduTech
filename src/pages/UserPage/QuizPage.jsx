@@ -39,7 +39,7 @@ export default function QuizPage() {
         const showAnswer = revealed[question.id];
         return <section className="finance-question" key={question.id}>
           <div className="finance-question-heading"><span className="finance-q">Q</span><h2>{question.q}</h2></div>
-          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={selected!==undefined || saving} className={selected===index ? 'selected' : ''} onClick={() => setAnswers(prev => ({...prev,[question.id]:index}))}>{option}</button>)}</div>}
+          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={saving} className={selected===index ? 'selected' : ''} onClick={() => setAnswers(prev => ({...prev,[question.id]:index}))}>{option}</button>)}</div>}
           {showAnswer ? <p className="finance-explanation"><strong>A.</strong> {question.explanation}</p> : <button className="finance-reveal" disabled={question.kind==='choice' && selected===undefined && !isAdmin} onClick={() => setRevealed(prev => ({...prev,[question.id]:true}))}>정답·해설 보기</button>}
           {showAnswer && selected!==undefined && <span className="finance-feedback" role="status">{selected===question.answer ? '정답입니다.' : '해설을 확인해 주세요.'}</span>}
         </section>;
