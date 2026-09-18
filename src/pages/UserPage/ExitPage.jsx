@@ -6,8 +6,7 @@ export default function ExitPage() {
     <h1>접속을 종료했습니다.</h1>
     <p>제출한 답안과 수업 기록은 삭제되지 않습니다.</p>
     <div className="finance-controls" style={{justifyContent:'center',marginTop:24}}>
-      <a href="/">학생용으로 접속</a>
-      <a href="/admin/session">교사용으로 접속</a>
+      <a href="/">다시 접속</a>
     </div>
   </main>;
 }

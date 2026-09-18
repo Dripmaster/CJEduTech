@@ -1,4 +1,5 @@
 // server/services/socket.service.js
+import {isTeacherSocket} from '../middlewares/teacher.js';
 import { randomUUID } from "crypto";
 import process from 'node:process';
 import fs from 'fs/promises';
@@ -1156,8 +1157,8 @@ export function initChatSocket(io) {
   io.of("/chat").on("connection", (socket) => {
     let joinedRoomId = null;
 
-    socket.on("room:join", async ({ roomId, round, videoId, isAdmin }) => {
-      console.log(isAdmin);
+    socket.on("room:join", async ({ roomId, round, videoId }) => {
+      const isAdmin = isTeacherSocket(socket);
       if (!roomId || ![1,2,3,4].includes(Number(round))) return;
 
       const composed = composeRoomId(roomId, round);
@@ -1458,6 +1459,7 @@ export function initChatSocket(io) {
 
     // 수동 트리거: 클라이언트가 AI 멘트 요청
     socket.on("ai:ment:request", async ({ roomId: reqRoomId }) => {
+      if (!isTeacherSocket(socket)) return;
 
       const targetRoom = reqRoomId || joinedRoomId;
             console.log("ment request: ",targetRoom);
@@ -1467,6 +1469,7 @@ export function initChatSocket(io) {
 
     // 수동 트리거: 클라이언트가 다음/이전 토론 주제 요청
     socket.on("room:next", async ({ roomId: reqRoomId, dir }) => {
+      if (!isTeacherSocket(socket)) return;
             const targetRoom = reqRoomId || joinedRoomId;
             console.log("next request: ", targetRoom, 'dir=', dir);
             if (!targetRoom) return;
@@ -1475,6 +1478,7 @@ export function initChatSocket(io) {
 
     // 사용자가 토론 종료 요청
     socket.on('room:end', ({ roomId: reqRoomId }) => {
+      if (!isTeacherSocket(socket)) return;
       const targetRoom = reqRoomId || joinedRoomId;
 
       console.log("end request: ",targetRoom);

@@ -11,9 +11,5 @@ export function prepareTabSession(pathname, storage = sessionStorage) {
   const studentEntry = pathname === '/' || pathname === '/user/login';
   if (teacherEntry && storage.getItem('isAdmin') !== 'true') clearTabSession(storage);
   if (studentEntry && storage.getItem('isAdmin') === 'true') clearTabSession(storage);
-  if (teacherEntry) {
-    storage.setItem('isAdmin','true');
-    storage.setItem('nickname','admin');
-  }
   if (studentEntry) storage.setItem('isAdmin','false');
 }

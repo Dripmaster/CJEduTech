@@ -1,3 +1,4 @@
+import {isTeacherSocket} from '../middlewares/teacher.js';
 import {randomUUID} from 'node:crypto';
 
 // One class per dedicated financial-education server. This must not join a
@@ -8,15 +9,14 @@ export function initCourseControl(io) {
   let state = null;
   namespace.on('connection', socket => {
     socket.on('course:join', (payload, reply) => {
-      // Preserve the existing app's role convention. This is not a new login
-      // or authentication mechanism: the current teacher role is client-set.
-      socket.data.courseTeacher = payload?.isAdmin === true;
+      // Client-provided role flags never grant teacher permissions.
+      socket.data.courseTeacher = isTeacherSocket(socket);
       socket.join(courseRoom);
       if (typeof reply === 'function') reply({ok:true, state});
     });
     socket.on('course:start-quiz', (payload, reply) => {
       const respond = value => { if (typeof reply === 'function') reply(value); };
-      if (!socket.rooms.has(courseRoom) || !socket.data.courseTeacher) {
+      if (!socket.rooms.has(courseRoom) || !isTeacherSocket(socket)) {
         respond({ok:false, error:'강사 화면에서 다음 단계를 시작해 주세요.'});
         return;
       }

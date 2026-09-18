@@ -1,5 +1,6 @@
 // src/components/user/login/LoginBox.jsx
 import './login.css';
+import {socket} from '@/api/chat';
 import { TOKEN_KEY, clearTabSession } from '@/lib/tab-session.js';
 import { useRoundStep } from '@/contexts/RoundStepContext';
 import LoginTitle from './LoginTitle';
@@ -20,7 +21,7 @@ export default function LoginBox() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const navigate = useNavigate();
-  const { setNickname: setUserNickname, setAvatarUrl } = useUser();
+  const { setNickname: setUserNickname, setAvatarUrl, setIsAdmin } = useUser();
 
   const showToast = (message, type) => {
     setToast({ message, type });
@@ -36,10 +37,13 @@ export default function LoginBox() {
     try {
       const { user, token } = await authApi.login({ nickname, password });
       if (!token) throw new Error('로그인 연결을 갱신 중입니다. 잠시 후 다시 시도해주세요.');
+      socket.disconnect();
       clearTabSession();
       resetProgress();
       sessionStorage.setItem(TOKEN_KEY, token);
       sessionStorage.setItem('isAdmin', 'false');
+      setIsAdmin(false);
+      socket.connect();
       // 컨텍스트 & 로컬스토리지 업데이트
       setUserNickname(user.nickname);
       setAvatarUrl(user.avatar ?? '');

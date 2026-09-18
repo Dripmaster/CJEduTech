@@ -1,3 +1,4 @@
+import {createRequire} from 'node:module';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
@@ -6,16 +7,19 @@ import {once} from 'node:events';
 import {io} from 'socket.io-client';
 
 const root=new URL('../',import.meta.url).pathname;
+const require=createRequire(new URL('../server/package.json',import.meta.url));
+const jwt=require('jsonwebtoken');
+const teacherToken=jwt.sign({uid:'test-teacher',role:'admin'},'teacher-socket-test');
 const ack=(socket,event,payload)=>new Promise((resolve,reject)=>socket.timeout(1500).emit(event,payload,(err,result)=>err?reject(err):resolve(result)));
 
 test('teacher starts the quiz or video stage for 20 students, including reconnects, without starting discussion', {timeout:15000}, async()=>{
  const allocator=createServer();allocator.listen(0,'127.0.0.1');await once(allocator,'listening');
  const port=allocator.address().port;await new Promise(resolve=>allocator.close(resolve));
- const child=spawn(process.execPath,['index.js'],{cwd:root+'server',env:{...process.env,PORT:String(port),DB_HOST:'127.0.0.1',AI_SERVER_BASE:'http://127.0.0.1:1'},stdio:['ignore','pipe','pipe']});
+ const child=spawn(process.execPath,['index.js'],{cwd:root+'server',env:{...process.env,JWT_SECRET:'teacher-socket-test',PORT:String(port),DB_HOST:'127.0.0.1',AI_SERVER_BASE:'http://127.0.0.1:1'},stdio:['ignore','pipe','pipe']});
  let output='';child.stdout.on('data',data=>output+=data);child.stderr.on('data',data=>output+=data);
  const sockets=[];
  async function connect(isAdmin=false){
-  const socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true});sockets.push(socket);
+  const socket=io(`http://127.0.0.1:${port}/chat`,{transports:['websocket'],forceNew:true,auth:{token:isAdmin?teacherToken:undefined}});sockets.push(socket);
   await once(socket,'connect');
   const joined=await ack(socket,'course:join',{isAdmin});
   assert.equal(joined.ok,true);
@@ -27,6 +31,10 @@ test('teacher starts the quiz or video stage for 20 students, including reconnec
    await new Promise(resolve=>setTimeout(resolve,40));
   }
   const teacher=await connect(true);
+  const forged=await connect(false);
+  await ack(forged.socket,'course:join',{isAdmin:true});
+  assert.equal((await ack(forged.socket,'course:start-quiz',{round:1})).ok,false,'payload isAdmin cannot grant teacher access');
+
   const students=await Promise.all(Array.from({length:20},()=>connect()));
   assert.equal(students[0].state,null);
   const received=students.map(({socket})=>{const list=[];socket.on('course:quiz',state=>list.push(state));return list;});
@@ -44,8 +52,10 @@ test('teacher starts the quiz or video stage for 20 students, including reconnec
    assert.ok(response.state.commandId);
    for(const [state] of await Promise.all(deliveries))assert.deepEqual(state,response.state);
    // Retrying a command keeps its identity so clients do not lose in-progress answers.
+   const retryDeliveries=students.map(({socket})=>once(socket,'course:quiz'));
    const retried=await ack(teacher.socket,'course:start-quiz',{round});
    assert.equal(retried.state.commandId,response.state.commandId);
+   await Promise.all(retryDeliveries);
   }
   const rejoined=students[0].socket;rejoined.disconnect();rejoined.connect();await once(rejoined,'connect');
   const snapshot=await ack(rejoined,'course:join',{isAdmin:false});
