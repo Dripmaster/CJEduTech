@@ -1,6 +1,7 @@
 // server/services/review.service.js
 import { getRoomSnapshot } from './socket.service.js';
 import { listRoomArchives } from './socket.service.js';
+import {startSummary, summaryKey, fetchAIJson} from './summary-jobs.js';
 
 const AI_BASE = process.env.AI_SERVER_BASE || process.env.AI_BASE || 'http://localhost:8000';
 
@@ -9,7 +10,46 @@ const overallSummaryCache = new Map();
 // in-memory cache: `${baseRoomId}|${nickname}` -> final result blob
 const finalResultCache = new Map();
 // in-memory cache: `${baseRoomId}|${nickname}|mvid=sortedIds` -> multi video final result blob
-const multiFinalResultCache = new Map();
+function archiveTime(a) {
+  const t = a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp;
+  const n = typeof t === 'number' ? t : Date.parse(t);
+  return Number.isFinite(n) ? n : 0;
+}
+function latestArchives(archives, videoIds) {
+  const latest = new Map();
+  for (const a of archives) {
+    const video = a.video_id_index ?? a.video_id_key;
+    if (video == null || (videoIds && !videoIds.some(v => String(v) === String(video)))) continue;
+    const previous = latest.get(String(video));
+    if (!previous || archiveTime(a) > archiveTime(previous)) latest.set(String(video), a);
+  }
+  return [...latest.values()];
+}
+function classificationProgress(archives) {
+  let pending = 0, failed = 0;
+  for (const a of archives) {
+    if (a.classification) {
+      pending += Number(a.classification.pending) || 0;
+      failed += Number(a.classification.failed) || 0;
+    } else for (const m of a.messages || []) {
+      if (m.ai?.state === 'PENDING') pending++;
+      if (m.ai?.state === 'ERROR') failed++;
+    }
+  }
+  return {status:pending ? 'pending' : failed ? 'partial' : 'ready', pending, failed};
+}
+async function personalSummary(scope, nickname, messages, opts) {
+  if (!messages.length) return {aiSummary:null, aiSummaryStatus:'empty'};
+  const payload = {user_id:nickname || 'me', user_messages:messages, discussion_context:{}};
+  const job = startSummary(summaryKey(scope, payload), async () => {
+    const data = await fetchAIJson(`${AI_BASE.replace(/\/$/, '')}/evaluate`, payload);
+    const value = data?.personalized_feedback || data?.result || data?.text;
+    if (typeof value !== 'string' || !value.trim()) throw new Error('Empty personal summary');
+    return value;
+  }, {force:opts.force, retry:opts.retryAI});
+  if (!opts.deferAI) await job.promise;
+  return {aiSummary:job.value, aiSummaryStatus:job.status};
+}
 
 function toBaseRoomId(roomId){
   // strip optional __r{n}
@@ -23,19 +63,10 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
   const desiredVideoId = (opts && Object.prototype.hasOwnProperty.call(opts, 'videoId')) ? opts.videoId : undefined;
   const vidKey = (typeof desiredVideoId === 'undefined' || desiredVideoId === null) ? 'latest' : String(desiredVideoId);
   const key = `${baseId}|${nickname||''}|vid=${vidKey}`;
-  const force = !!opts.force;
-  if (!force && finalResultCache.has(key)){
-    const cached = finalResultCache.get(key);
-    return { roomId: baseId, nickname, cached: true, ...cached };
-  }
-  let archives = await listRoomArchives(baseId);
+  let archives = opts.archives || await listRoomArchives(baseId);
 
   // ---- Video-scoped archive selection (latest per video) ----
-  const timeOf = (a) => {
-    const t = a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp;
-    const n = t ? Date.parse(t) : NaN;
-    return Number.isFinite(n) ? n : 0;
-  };
+  const timeOf = archiveTime;
 
   // Keep only archives that have explicit video identity
   const validArchives = (archives || []).filter(a =>
@@ -69,22 +100,6 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
   archives = filtered;
   // Stable order (usually single item)
   archives = archives.sort((x,y) => timeOf(x) - timeOf(y));
-  // Debug: print aggregation target archives (files) for this run
-  try {
-    const debugList = (archives || []).map((a, i) => ({
-      idx: i,
-      video_id_index: a?.video_id_index,
-      video_id_key: a?.video_id_key,
-      round_number: a?.round_number,
-      file: a?.file || a?.filename || a?.path || a?.source || null,
-      archivedAt: a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp || null,
-      totalMessages: Array.isArray(a?.messages) ? a.messages.length : null,
-    }));
-    console.info('[FinalResult][selected archives]', { roomId: baseId, desiredVideoId, count: debugList.length, list: debugList });
-  } catch (e) {
-    console.warn('[FinalResult][debug log failed]', e?.message);
-  }
-
   if (!archives.length){
     const empty = {
       createdAt: new Date().toISOString(),
@@ -175,21 +190,9 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
     percentages: Object.fromEntries(Object.entries(integratedLabelsMine).map(([k,v])=>[k, Math.round((v/totalLabelSumMine)*1000)/10]))
   };
 
-  // 5) AI summary with only my messages (skippable)
-  let aiSummary = null;
-  const skipAISummary = !!opts.skipAISummary;
-  try {
-    if (!skipAISummary) {
-      const myMsgs = allMessages.filter(m => (nickname||'') && m.nickname === nickname).map(m => ({ text: m.text || '' }));
-      if (myMsgs.length){
-        const url = `${AI_BASE.replace(/\/$/, '')}/evaluate`;
-        const payload = { user_id: nickname || 'me', user_messages: myMsgs, discussion_context:{} };
-        const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
-        if (res.ok){ const data = await res.json().catch(()=>({})); aiSummary = data?.personalized_feedback || data?.result || data?.text || null; }
-        console.log("aiSummary:",aiSummary);
-      }
-    }
-  } catch {}
+  const summary = opts.skipAISummary ? {aiSummary:null, aiSummaryStatus:'empty'} : await personalSummary(
+    [baseId, vidKey], nickname,
+    allMessages.filter(m => nickname && m.nickname === nickname).map(m => ({text:m.text || ''})), opts);
 
   // 6) Top3 statements: only my statements (highest reactions)
   const top3Base = allMessages
@@ -209,7 +212,8 @@ export async function generateFinalResult(roomId, nickname, opts = {}){
   const sections = {
     video: selectedVideoId,
     overall,
-    aiSummary,
+    ...summary,
+    classification:classificationProgress(archives),
     personaIntegrated,
     personaIntegratedMine,
     personaByRound,
@@ -242,11 +246,6 @@ export async function generateOverallSummary(roomId, opts = {}) {
   const force = !!opts.force;
   if (!roomId) throw new Error('roomId_required');
 
-  if (!force && overallSummaryCache.has(roomId)) {
-    const cached = overallSummaryCache.get(roomId);
-    return { roomId, cached: true, ...cached };
-  }
-
   const snap = getRoomSnapshot(roomId);
 
   // Prefer in-memory snapshot; if empty (e.g., room already cleaned up), fall back to latest archive
@@ -257,13 +256,8 @@ export async function generateOverallSummary(roomId, opts = {}) {
 
   if (!messages.length) {
     try {
-      const baseId = toBaseRoomId(roomId);
-      const archives = await listRoomArchives(baseId);
-      const timeOf = (a) => {
-        const t = a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp;
-        const n = t ? Date.parse(t) : NaN;
-        return Number.isFinite(n) ? n : (typeof t === 'number' ? t : 0);
-      };
+      const archives = await listRoomArchives(roomId);
+      const timeOf = archiveTime;
       const latest = (archives || []).sort((x, y) => timeOf(y) - timeOf(x))[0];
       if (latest) {
         // Build messages in the same shape as getRoomSnapshot
@@ -299,101 +293,37 @@ export async function generateOverallSummary(roomId, opts = {}) {
   if (typeof round_number !== 'undefined') discussion_context.round_number = round_number;
 
   const payload = { user_id: 'system', all_user_messages, discussion_context };
-  console.log(payload);
-  const url = `${AI_BASE.replace(/\/$/, '')}/discussion-overall`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!res.ok) {
-
-    const body = await res.text().catch(() => '');
-    const err = new Error(`ai_request_failed: ${res.status}`);
-    err.details = body;
-    throw err;
-  }
-  const data = await res.json().catch(() => ({}));
-
-  // AI 서버가 { summary: "..."} 형태를 준다고 가정, 없으면 백업
-  const summaryText = data?.discussion_summary || data?.summary || data?.result || data?.text || JSON.stringify(data);
-  const result = { summaryText, createdAt: new Date().toISOString(), payload };
+  if (!all_user_messages.length) return {roomId, summaryText:null, status:'empty'};
+  const job = startSummary(summaryKey(['overall', roomId], payload), async () => {
+    const data = await fetchAIJson(`${AI_BASE.replace(/\/$/, '')}/discussion-overall`, payload);
+    const summaryText = data?.discussion_summary || data?.summary || data?.result || data?.text;
+    if (typeof summaryText !== 'string' || !summaryText.trim()) throw new Error('Empty room summary');
+    return summaryText;
+  }, {force});
+  if (!opts.deferAI) await job.promise;
+  const result = {roomId, summaryText:job.value, status:job.status, createdAt:new Date().toISOString()};
   overallSummaryCache.set(roomId, result);
-  return { roomId, cached: false, ...result };
+  job.promise.then(() => {
+    result.summaryText = job.value;
+    result.status = job.status;
+  });
+  return result;
 }
 
 // Aggregate across multiple videoIds
 export async function generateMultiVideoFinalResult(roomId, nickname, videoIds = [], opts = {}) {
   if (!Array.isArray(videoIds) || !videoIds.length)
     throw new Error('videoIds_required');
-  try { console.info('[MultiFinalResult][request]', { roomId, nickname, videoIds }); } catch {}
-
-    const baseId = toBaseRoomId(roomId);
-    const sortedKey = videoIds.map(v => String(v)).sort().join(',');
-    const key = `${baseId}|${nickname||''}|mvid=${sortedKey}`;
-    const force = !!opts.force;
-    if (!force && multiFinalResultCache.has(key)) {
-      const cached = multiFinalResultCache.get(key);
-      return { roomId: baseId, nickname, cached: true, ...cached };
-    }
-
-  const allResults = [];
-  for (const vid of videoIds) {
-    const r = await generateFinalResult(roomId, nickname, { videoId: vid, skipAISummary: true });
-    if (r && r.sections) allResults.push(r.sections);
-  }
-
-  // Collect my messages across the latest archives of requested videos for a single AI summary call
-  let aiSummary = null;
-  try {
-    const archives = await listRoomArchives(toBaseRoomId(roomId));
-    const timeOf = (a) => {
-      const t = a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp;
-      const n = t ? Date.parse(t) : NaN;
-      return Number.isFinite(n) ? n : 0;
-    };
-    // keep only with video identity
-    const valid = (archives||[]).filter(a => typeof a?.video_id_index !== 'undefined' || typeof a?.video_id_key !== 'undefined');
-    // latest by video for requested list
-    const latestByVideo = {};
-    for (const a of valid) {
-      const vid = (typeof a.video_id_index !== 'undefined') ? a.video_id_index : a.video_id_key;
-      if (!videoIds.some(v => String(v) === String(vid))) continue;
-      if (!latestByVideo[vid] || timeOf(a) > timeOf(latestByVideo[vid])) latestByVideo[vid] = a;
-    }
-    // gather my messages
-    const myMsgs = Object.values(latestByVideo)
-      .flatMap(a => Array.isArray(a?.messages) ? a.messages : [])
-      .filter(m => (nickname||'') && m.nickname === nickname && (m?.text||'').trim().length > 0)
-      .map(m => ({ text: m.text || '' }));
-    if (myMsgs.length) {
-      const url = `${AI_BASE.replace(/\/$/, '')}/evaluate`;
-      const payload = { user_id: nickname || 'me', user_messages: myMsgs, discussion_context:{} };
-      const res = await fetch(url, { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) });
-      if (res.ok){ const data = await res.json().catch(()=>({})); aiSummary = data?.personalized_feedback || data?.result || data?.text || null; }
-      console.info('[MultiFinalResult][aiSummary] requested once for all videos', { countMessages: myMsgs.length });
-    }
-  } catch (e) {
-    console.warn('[MultiFinalResult][aiSummary] failed', e?.message);
-  }
-
-  if (!allResults.length) {
-    const empty = {
-      roomId:baseId,
-      nickname,
-      createdAt: new Date().toISOString(),
-      sections: {
-        overall: { rank: null, score: null, totalMessages: 0, totalReactions: 0 },
-        aiSummary: null,
-        personaIntegrated: { counts: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 }, percentages: { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 } },
-        personaByVideo: [],
-        participationByVideo: [],
-        ranking: [],
-      }
-    };
-      multiFinalResultCache.set(key, empty);
-      return { cached: false, ...empty };
-  }
+  const baseId = toBaseRoomId(roomId);
+  const archives = latestArchives(await listRoomArchives(baseId), videoIds);
+  const allResults = await Promise.all(videoIds.map(async videoId => {
+    const result = await generateFinalResult(roomId, nickname, {videoId, skipAISummary:true, archives});
+    return result.sections;
+  }));
+  const myMessages = archives.flatMap(a => a.messages || [])
+    .filter(m => nickname && m.nickname === nickname && (m.text || '').trim());
+  const summary = await personalSummary([baseId, videoIds.map(String).sort()], nickname,
+    myMessages.map(m => ({text:m.text})), opts);
 
   const mergedLabels = { '금융이해':0,'계획성':0,'실천의지':0,'위험인식':0 };
   const mergedRanking = {};
@@ -495,30 +425,9 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
     myReactions: Number(v.myReactions || 0),
   })) : [];
 
-  // Build Top3 statements across latest archives of the requested videos (only my messages)
-  let top3Statements = [];
-  try {
-    const archives2 = await listRoomArchives(toBaseRoomId(roomId));
-    const timeOf2 = (a) => {
-      const t = a?.archivedAt || a?.createdAt || a?.updatedAt || a?.endedAt || a?.timestamp;
-      const n = t ? Date.parse(t) : NaN;
-      return Number.isFinite(n) ? n : 0;
-    };
-    const valid2 = (archives2||[]).filter(a => typeof a?.video_id_index !== 'undefined' || typeof a?.video_id_key !== 'undefined');
-    const latestByVideo2 = {};
-    for (const a of valid2) {
-      const vid = (typeof a.video_id_index !== 'undefined') ? a.video_id_index : a.video_id_key;
-      if (!videoIds.some(v => String(v) === String(vid))) continue;
-      if (!latestByVideo2[vid] || timeOf2(a) > timeOf2(latestByVideo2[vid])) latestByVideo2[vid] = a;
-    }
-    const myMsgs2 = Object.values(latestByVideo2)
-      .flatMap(a => Array.isArray(a?.messages) ? a.messages : [])
-      .filter(m => (nickname||'') && m.nickname === nickname && (m?.text||'').trim().length > 0);
-    top3Statements = myMsgs2
-      .sort((a,b)=> (b.reactionsCount||0) - (a.reactionsCount||0))
-      .slice(0,3)
-      .map(m => ({ text: m.text, reactionsCount: m.reactionsCount || 0, createdAt: m.createdAt, round_number: m.round_number }));
-  } catch {}
+  const top3Statements = [...myMessages]
+    .sort((a,b) => (b.reactionsCount || 0) - (a.reactionsCount || 0)).slice(0,3)
+    .map(m => ({text:m.text, reactionsCount:m.reactionsCount || 0, createdAt:m.createdAt, round_number:m.round_number}));
 
   const result = {
     roomId: baseId,
@@ -526,7 +435,8 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
     createdAt: new Date().toISOString(),
     sections: {
       overall,
-      aiSummary,
+      ...summary,
+      classification:classificationProgress(archives),
       personaIntegrated :personaIntegratedMine ,
       personaByVideo,
       participationByVideo,
@@ -537,6 +447,5 @@ export async function generateMultiVideoFinalResult(roomId, nickname, videoIds =
       ranking,
     }
   };
-  multiFinalResultCache.set(key, result);
   return { cached: false, ...result };
 }

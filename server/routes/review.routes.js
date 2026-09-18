@@ -50,7 +50,7 @@ router.post('/:roomId/multi-final-result', async (req, res) => {
     const videoIds = Array.isArray(req.body?.videoIds) ? req.body.videoIds : [];
     if (!videoIds.length) return res.status(400).json({ error: 'videoIds_required' });
     const force = String(req.query?.force || '').toLowerCase() === 'true';
-    const result = await generateMultiVideoFinalResult(roomId, nickname, videoIds, { force });
+    const result = await generateMultiVideoFinalResult(roomId, nickname, videoIds, { force, deferAI:req.body?.deferAI === true, retryAI:req.body?.retryAI === true });
     return res.json(result);
   } catch (e) {
     return res.status(500).json({ error: 'multi_final_result_failed', message: e?.message });
@@ -64,7 +64,7 @@ router.post('/:roomId/overall-summary', async (req, res) => {
 
   console.log("post",roomId)
     const force = String(req.query?.force || '').toLowerCase() === 'true';
-    const result = await generateOverallSummary(roomId, { force });
+    const result = await generateOverallSummary(roomId, { force, deferAI:req.body?.deferAI === true, retryAI:req.body?.retryAI === true });
     return res.json(result);
   } catch (e) {
     return res.status(500).json({ error: 'overall_summary_failed', message: e?.message });

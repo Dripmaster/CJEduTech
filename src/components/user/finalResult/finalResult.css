@@ -284,3 +284,5 @@ letter-spacing: 0.354px;
   .final-result-page.is-admin .frp-ai-summary__text { font-size: 24px; }
   .final-result-page.is-admin .frp-top3__content { font-size: 20px; }
 }
+.frp-result-status { padding:0 24px; font-size:14px; line-height:1.5; color:#334155; }
+.frp-result-status p { margin:8px 0; }
