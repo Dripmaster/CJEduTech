@@ -4,6 +4,9 @@ import { randomUUID } from "crypto";
 import process from 'node:process';
 import fs from 'fs/promises';
 import path from 'path';
+import {startSummary, summaryKey, fetchAIJson} from './summary-jobs.js';
+const classificationJobs = new Map();
+const archiveWrites = new Map();
 
 // ===== In-memory stores =====
 const MAX_RECENT = 100;
@@ -133,7 +136,12 @@ async function loadVideoDiscussionQuestions(videoId){
 // ===== Archiving (persist chat logs per room) =====
 const ARCHIVE_DIR = process.env.CHAT_ARCHIVE_DIR || path.join(process.cwd(), 'data', 'chat_archives');
 async function ensureDir(dir){ try{ await fs.mkdir(dir, { recursive: true }); }catch{ /*noop*/ } }
-async function writeJSON(file, obj){ await ensureDir(path.dirname(file)); await fs.writeFile(file, JSON.stringify(obj, null, 2), 'utf-8'); }
+async function writeJSON(file, obj){
+  await ensureDir(path.dirname(file));
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporary, JSON.stringify(obj, null, 2), 'utf-8');
+  await fs.rename(temporary, file);
+}
 async function readJSON(file){ const buf = await fs.readFile(file, 'utf-8'); return JSON.parse(buf); }
 
 // ===== Room lifetime =====
@@ -387,7 +395,7 @@ function cleanupRoomIfEmpty(io, roomId) {
 
   // Leaving/reloading is not ending a lesson. Keep submitted messages and
   // topic state until the teacher ends it (or the operator resets the service).
-  if (!st?.isClosing) return false;
+  if (!st?.isClosing || st.resultsProcessing || st.archiveFailed) return false;
 
   // remove per-user cooldown map etc.
   roomStates.delete(roomId);
@@ -406,26 +414,7 @@ function cleanupRoomIfEmpty(io, roomId) {
 
 
 
-// ---- Room expiry helpers ----
-async function expireRoom(io, roomId) {
-  // Add guard to prevent duplicate runs
-  const stFlag = getRoomState(roomId);
-  if (stFlag.isClosing) return; // prevent duplicate runs
-  stFlag.isClosing = true;
-
-  const ns = io.of('/chat');
-  const roomKey = `room:${roomId}`;
-  // 1) 종료 준비 안내 (결과 생성 중)
-  ns.to(roomKey).emit('room:closing', { roomId, reason: 'max_age', maxAgeMs: ROOM_MAX_AGE_MS });
-  // ⚠️ 여기서는 아직 방에서 소켓을 제거하지 않습니다. (결과 준비 완료 신호를 받아야 함)
-
-  // stop test bots if running
-  const st = roomStates.get(roomId);
-  if (st?.botTimers && st.botTimers.length) {
-    for (const t of st.botTimers) clearTimeout(t);
-    st.botTimers = [];
-  }
-
+function updateRoomStatistics(roomId, createdAt = Date.now()) {
   // 결과 집계 (per user)
   const msgs = messagesByRoom.get(roomId) || [];
   const avatarIdByNick = {}; // ✅ 닉네임→아바타 맵
@@ -493,108 +482,98 @@ async function expireRoom(io, roomId) {
     else { rank += sameCount; sameCount = 1; lastScore = s; }
     rankingArr[i].rank = rank;
   }
-  // === Persona grouping (server-provided) ===
-  const groups =  undefined;
-  /*
-  const groups = { 금융이해: [], 위험인식: [], 계획성: [], 실천의지: [] };
-  const ORDER = ['금융이해','위험인식','계획성','실천의지'];
-  for (const [nick, u] of Object.entries(perUser)) {
-    const counts = u.labels || {};
-    let best = null; let bestCnt = -1;
-    for (const k of ORDER){
-      const v = Number(counts[k] || 0);
-      if (v > bestCnt){ bestCnt = v; best = k; }
-      else if (v === bestCnt && v > 0) {  }
-    }
+  const states = msgs.map(m => aiByMsg.get(m.id)?.state);
+  const pending = states.filter(state => !state || state === 'PENDING').length;
+  const failed = states.filter(state => state === 'ERROR').length;
+  const classification = {status:pending ? 'pending' : failed ? 'partial' : 'ready', pending, failed};
+  const previous = resultsByRoom.get(roomId) || {};
+  const result = {...previous, createdAt:previous.createdAt || createdAt, roomId, perUser, ranking:rankingArr,
+    avatarMap:avatarIdByNick, classification};
+  resultsByRoom.set(roomId, result);
+  for (const row of rankingArr) lastResultByUser.set(row.nickname, {...row, roomId,
+    createdAt:result.createdAt, topReacted:perUser[row.nickname]?.topReacted});
+  return result;
+}
 
-    // If no labels yet, assign to the smallest group (ties resolved by ORDER priority)
-    if (!best || bestCnt <= 0) {
-      let minKey = ORDER[0];
-      for (const k of ORDER) {
-        if (groups[k].length < groups[minKey].length) minKey = k;
-      }
-      groups[minKey].push({ nickname: nick, totalPersonaLabels: 0, topReacted: u.topReacted || null });
-      continue;
-    }
+function persistRoomResult(roomId) {
+  const previous = archiveWrites.get(roomId) || Promise.resolve();
+  const next = previous.catch(() => {}).then(async () => {
+    const st = roomStates.get(roomId);
+    if (!resultsByRoom.has(roomId) || !st) return;
+    const videoKey = await resolveVideoKey(st.videoId);
+    // Capture aggregate and messages without an await between them. Otherwise
+    // a late classification could make an old score appear fully finalized.
+    const result = updateRoomStatistics(roomId);
+    result.persistenceStatus = 'ready';
+    const {baseId, round} = decomposeRoomId(roomId);
+    const suffix = round === undefined ? '' : `-r${round}`;
+    const archive = {...result, expireAt:st.expireAt, topic:st.topic || '',
+      video_id_index:st.videoId, video_id_key:videoKey,
+      round_number:st.roundNumber || round, messages:serializeMessagesForArchive(roomId)};
+    await writeJSON(path.join(ARCHIVE_DIR, `${baseId}${suffix}-${result.createdAt}.json`), archive);
+    await writeJSON(path.join(ARCHIVE_DIR, `${baseId}${suffix}-latest.json`), archive);
+    st.archiveFailed = false;
+  }).catch(error => {
+    const st = roomStates.get(roomId);
+    if (st) st.archiveFailed = true;
+    const result = resultsByRoom.get(roomId);
+    if (result) result.persistenceStatus = 'error';
+    console.error('[Result archive]', error.message);
+  });
+  archiveWrites.set(roomId, next);
+  return next.finally(() => {if (archiveWrites.get(roomId) === next) archiveWrites.delete(roomId);});
+}
 
-    const topForBest = perUserTopByLabel[nick]?.[best] || u.topReacted || null;
-    groups[best].push({ nickname: nick, totalPersonaLabels: bestCnt, topReacted: topForBest });
+// ---- Room expiry helpers ----
+async function expireRoom(io, roomId) {
+  // Add guard to prevent duplicate runs
+  const stFlag = getRoomState(roomId);
+  if (stFlag.isClosing) return; // prevent duplicate runs
+  stFlag.isClosing = true;
+
+  const ns = io.of('/chat');
+  const roomKey = `room:${roomId}`;
+  // 1) 종료 준비 안내 (결과 생성 중)
+  ns.to(roomKey).emit('room:closing', { roomId, reason: 'max_age', maxAgeMs: ROOM_MAX_AGE_MS });
+  // ⚠️ 여기서는 아직 방에서 소켓을 제거하지 않습니다. (결과 준비 완료 신호를 받아야 함)
+
+  // stop test bots if running
+  const st = roomStates.get(roomId);
+  if (st?.botTimers && st.botTimers.length) {
+    for (const t of st.botTimers) clearTimeout(t);
+    st.botTimers = [];
   }
-  for (const k of Object.keys(groups)){
-    groups[k].sort((a,b) => {
-      const ra = a.topReacted?.reactionsCount || 0;
-      const rb = b.topReacted?.reactionsCount || 0;
-      if (rb !== ra) return rb - ra;
-      if ((b.totalPersonaLabels||0) !== (a.totalPersonaLabels||0)) return (b.totalPersonaLabels||0) - (a.totalPersonaLabels||0);
-      const ua = perUser[a.nickname]?.totalReactions || 0;
-      const ub = perUser[b.nickname]?.totalReactions || 0;
-      return ub - ua;
-    });
-  }*/
 
-    // Defer topic-wise summaries to background for speed
-    let topicSummaries = { topics: [], generatedAt: null };
-
-  // === Defer overall summary to background for speed ===
-  let overallSummaryText = null;
-
-  const createdAt = Date.now();
-  resultsByRoom.set(roomId, { createdAt, roomId, perUser, ranking: rankingArr, groups, topicSummaries, avatarMap: avatarIdByNick, overallSummary: overallSummaryText });
-  for (const r of rankingArr) {
-    lastResultByUser.set(r.nickname, {
-      roomId,
-      rank: r.rank,
-      score: r.score,
-      totalMessages: r.totalMessages,
-      totalReactions: r.totalReactions,
-      labels: r.labels,
-      createdAt,
-      topReacted: perUser[r.nickname]?.topReacted,
-    });
-  }
-
-  // === Archive to disk ===
-  const stMeta = roomStates.get(roomId) || {};
-  // Persist video id information for final aggregation by video
-  let video_id_index = (typeof stMeta.videoId !== 'undefined') ? stMeta.videoId : undefined;
-  let video_id_key;
-  try {
-    video_id_key = await resolveVideoKey(stMeta.videoId);
-  } catch {}
-  const archive = {
-    roomId,
-    createdAt,
-    expireAt: stMeta.expireAt || Date.now(),
-    topic: stMeta.topic || '',
-    video_id_index,
-    video_id_key,
-    round_number: stMeta.roundNumber || (stMeta.context && stMeta.context.round_number) || undefined,
-    messages: serializeMessagesForArchive(roomId),
-    perUser,
-    ranking: rankingArr,
-    groups,
-    avatarMap: avatarIdByNick, // ✅ 추가
-    topicSummaries,
-    overallSummary: overallSummaryText,
-  };
-  const { baseId, round } = decomposeRoomId(roomId);
-  const suffix = round !== undefined ? `-r${round}` : '';
-  const latestFile = path.join(ARCHIVE_DIR, `${baseId}${suffix}-latest.json`);
-  const datedFile = path.join(ARCHIVE_DIR, `${baseId}${suffix}-${createdAt}.json`);
-  try {
-    await writeJSON(datedFile, archive);
-    await writeJSON(latestFile, archive);
-  } catch (e) {
-    console.error('[ARCHIVE] write error:', e?.message || e);
-  }
+  stFlag.resultsProcessing = true;
+  const previousCompletion = resultsByRoom.get(roomId)?.createdAt || 0;
+  resultsByRoom.delete(roomId);
+  const initial = updateRoomStatistics(roomId, Math.max(Date.now(), previousCompletion + 1));
+  initial.topicSummaries = {topics:[], status:'pending', completed:0, total:0, failed:0};
+  initial.overallSummary = null;
+  initial.overallSummaryStatus = 'pending';
+  await persistRoomResult(roomId);
 
   // 2) 결과 준비 완료 알림 (이 신호를 받은 클라이언트가 결과 페이지로 이동)
   ns.to(roomKey).emit('results:ready', { roomId });
 
-  // 2.5) 토픽/종합 요약 생성 완료까지 대기하여 클라이언트가 topics:ready / overallSummary:ready를 수신할 수 있도록 함
-  try {
-    await buildAndBroadcastSummaries(io, roomId);
-  } catch {}
+  // Classifications already in flight can complete after the first dashboard.
+  // Re-aggregate and persist before releasing message state.
+  const settleClassification = (async () => {
+    await Promise.allSettled((messagesByRoom.get(roomId) || []).map(m => classificationJobs.get(m.id)).filter(Boolean));
+    updateRoomStatistics(roomId);
+    await persistRoomResult(roomId);
+    ns.to(roomKey).emit('results:updated', {roomId});
+  })();
+  const summaries = buildAndBroadcastSummaries(io, roomId);
+  // Prepare personal feedback when the last lesson ends, without waiting for a
+  // teacher to visit each student's dashboard. The shared AI queue bounds load.
+  if (Number(st.videoId) === DEFAULT_VIDEO_INDEX.length - 1) {
+    import('./review.service.js').then(mod => Promise.all(Object.keys(initial.perUser).map(nickname =>
+      mod.generateMultiVideoFinalResult(roomId, nickname, DEFAULT_VIDEO_INDEX.map((_,i)=>i), {deferAI:true})
+    ))).catch(error => console.warn('[Final pre-generation]', error.message));
+  }
+  await Promise.allSettled([settleClassification, summaries]);
+  stFlag.resultsProcessing = false;
 
   // 3) 최종 만료 이벤트 브로드캐스트
   ns.to(roomKey).emit('room:expired', { roomId, reason: 'max_age', maxAgeMs: ROOM_MAX_AGE_MS });
@@ -612,97 +591,61 @@ async function expireRoom(io, roomId) {
   cleanupRoomIfEmpty(io, roomId);
 }
 
-// ---- Background job for topic and overall summaries ----
-async function buildAndBroadcastSummaries(io, roomId){
-  // Reuse existing in-memory data
-  const stS = getRoomState(roomId);
+// ---- Independent room summary and bounded per-participant summary jobs ----
+async function buildAndBroadcastSummaries(io, roomId) {
+  const {generateOverallSummary} = await import('./review.service.js');
+  const st = getRoomState(roomId);
   const msgs = messagesByRoom.get(roomId) || [];
-  const perUser = (resultsByRoom.get(roomId) || {}).perUser || {};
-
-  // --- Topic-wise representative statements (moved from expireRoom) ---
-  let topicSummaries = { topics: [], generatedAt: Date.now() };
-  try {
-    if (!stS.topicSummariesGenerated) {
-      const chat_history = msgs.map(m => ({ nickname: m.nickname, text: m.text, timestamp: m.createdAt }));
-      const names = Array.isArray(stS.topics) ? stS.topics : [];
-      const discussion_topics = names.map(n => ({ name: String(n || ''), description: '' }));
-
-      const botNames = Array.isArray(stS.botNicknames) ? new Set(stS.botNicknames) : new Set();
-      const userNicknames = Object.keys(perUser).filter(n => !botNames.has(n));
-
-      const byTopic = new Map();
-      for (const n of names) byTopic.set(String(n), []);
-
-      if (AI_ENDPOINT && userNicknames.length && discussion_topics.length) {
-        for (const nick of userNicknames) {
-          try {
-            const res = await fetch(AI_ENDPOINT + '/user-summary', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', ...(AI_API_KEY ? { 'Authorization': `Bearer ${AI_API_KEY}` } : {}) },
-              body: JSON.stringify({ user_id: nick, chat_history, discussion_topics, max_statements_per_topic: 1 })
-            });
-            if (!res.ok) throw new Error('user-summary http ' + res.status);
-            const data = await res.json();
-            if (data && Array.isArray(data.topics)) {
-              for (const t of data.topics) {
-                const topicName = t?.topic || '';
-                const arr = byTopic.get(topicName) || [];
-                const relevance = typeof t?.relevance_score === 'number' ? t.relevance_score : 0;
-                const summaryText = (t?.summary && String(t.summary)) || (Array.isArray(t?.related_statements) && t.related_statements[0]) || '';
-                if (summaryText) arr.push({ nickname: nick, summary: summaryText, relevance });
-                byTopic.set(topicName, arr);
-              }
-            }
-          } catch {}
-        }
-      } else {
-        const buckets = stS.topicBuckets instanceof Map ? stS.topicBuckets : new Map();
-        for (const [topic, byUser] of buckets.entries()) {
-          const arr = [];
-          for (const [nick, msgsArr] of byUser.entries()) {
-            const m = (msgsArr || [])[0];
-            if (m && m.text) arr.push({ nickname: nick, summary: m.text, relevance: 0 });
-          }
-          byTopic.set(topic, arr);
-        }
-      }
-
-      const topicsOut = [];
-      for (const name of (Array.isArray(stS.topics) ? stS.topics : [])) {
-        const items = (byTopic.get(String(name)) || []).sort((a,b) => (b.relevance||0) - (a.relevance||0));
-        topicsOut.push({ topic: String(name), summaries: items });
-      }
-      topicSummaries.topics = topicsOut;
-      stS.topicSummariesGenerated = true;
+  const result = resultsByRoom.get(roomId);
+  const names = (st.topics || []).map(String);
+  const botNames = new Set(st.botNicknames || []);
+  const nicknames = Object.keys(result.perUser).filter(n => !botNames.has(n));
+  const topics = {topics:names.map(topic => ({topic,summaries:[]})), status:'pending',
+    total:names.length ? nicknames.length : 0, completed:0, failed:0, generatedAt:null};
+  result.topicSummaries = topics;
+  const notify = async event => {
+    await persistRoomResult(roomId);
+    io.of('/chat').to(`room:${roomId}`).emit(event, {roomId});
+  };
+  const overall = (async () => {
+    try {
+      const summary = await generateOverallSummary(roomId);
+      result.overallSummary = summary.summaryText;
+      result.overallSummaryStatus = summary.status;
+    } catch (error) {
+      result.overallSummaryStatus = 'error';
+      console.warn('[Overall summary]', error.message);
     }
-  } catch {}
-
-  // Persist into results map & notify clients (socket)
-  const cur = resultsByRoom.get(roomId) || { roomId };
-  cur.topicSummaries = topicSummaries;
-  resultsByRoom.set(roomId, cur);
-
-  // Optional: archive refresh of latest file
-  try {
-    const { baseId, round } = decomposeRoomId(roomId);
-    const suffix = round !== undefined ? `-r${round}` : '';
-    const latestFile = path.join(ARCHIVE_DIR, `${baseId}${suffix}-latest.json`);
-    const datedFile = path.join(ARCHIVE_DIR, `${baseId}${suffix}-${cur.createdAt || Date.now()}.json`);
-    await writeJSON(latestFile, { ...(await readJSON(latestFile)), topicSummaries });
-  } catch {}
-
-  io.of('/chat').to(`room:${roomId}`).emit('topics:ready', { roomId });
-
-  // --- Overall summary in background ---
-  try {
-    const mod = await import('./review.service.js');
-    const sum = await mod.generateOverallSummary?.(roomId, { force: true });
-    const overallSummaryText = sum?.summaryText || null;
-    const cur2 = resultsByRoom.get(roomId) || { roomId };
-    cur2.overallSummary = overallSummaryText;
-    resultsByRoom.set(roomId, cur2);
-    io.of('/chat').to(`room:${roomId}`).emit('overallSummary:ready', { roomId });
-  } catch {}
+    // Statistics may have replaced the outer object while these jobs ran.
+    Object.assign(resultsByRoom.get(roomId), {overallSummary:result.overallSummary, overallSummaryStatus:result.overallSummaryStatus});
+    await notify('overallSummary:ready');
+  })();
+  const chat_history = msgs.map(m => ({nickname:m.nickname,text:m.text,timestamp:m.createdAt}));
+  await Promise.all((names.length ? nicknames : []).map(async nickname => {
+    const payload = {user_id:nickname,chat_history,discussion_topics:names.map(name=>({name,description:''})),max_statements_per_topic:1};
+    const job = startSummary(summaryKey(['topics',roomId],payload), async () => {
+      const data = await fetchAIJson(AI_ENDPOINT + '/user-summary',payload);
+      if (!Array.isArray(data.topics)) throw new Error('Invalid topic summary');
+      return data;
+    });
+    await job.promise;
+    if (job.status === 'ready') {
+      for (const item of job.value.topics) {
+        const target = topics.topics.find(t => t.topic === item.topic);
+        const summary = item.summary || item.related_statements?.[0];
+        if (target && summary) {
+          target.summaries.push({nickname,summary,relevance:Number(item.relevance_score) || 0});
+          target.summaries.sort((a,b)=>b.relevance-a.relevance);
+        }
+      }
+    } else topics.failed++;
+    topics.completed++;
+    topics.status = topics.completed < topics.total ? 'pending' : topics.failed ? 'partial' : 'ready';
+    topics.generatedAt = Date.now();
+    await notify('topics:ready');
+  }));
+  if (!topics.total) {topics.status='empty'; await notify('topics:ready');}
+  await overall;
 }
 
 function ensureRoomExpiry(io, roomId) {
@@ -1024,12 +967,18 @@ async function generateMentAndBroadcast(io, roomId) {
   return Boolean(sentTopic || sentEnc);
 }
 
-async function classifyAndBroadcast(io, msg) {
+function classifyAndBroadcast(io, msg) {
+  const job = classifyMessage(io, msg);
+  classificationJobs.set(msg.id, job);
+  job.finally(() => classificationJobs.delete(msg.id));
+  return job;
+}
+async function classifyMessage(io, msg) {
   aiByMsg.set(msg.id, { state: "PENDING" });
   if (!AI_ENDPOINT) {
     // 폴백: 이전 랜덤 시뮬레이터 유지
     try {
-      simulateAiClassification().then(({ label, score }) => {
+      await simulateAiClassification().then(({ label, score }) => {
         if (label && score >= MIN_AI_SCORE) {
           aiByMsg.set(msg.id, { label, score, state: "DONE" });
           io.of("/chat").to(`room:${msg.roomId}`).emit("message:ai", {
@@ -1048,6 +997,7 @@ async function classifyAndBroadcast(io, msg) {
   }
   try {
     const res = await fetch(AI_ENDPOINT + "/classify-gpt", {
+      signal:AbortSignal.timeout(25000),
       method: "POST",
       headers: {
         "Content-Type": "application/json",

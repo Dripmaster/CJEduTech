@@ -27,6 +27,7 @@ import avatar12 from "@/assets/images/avatar/avatar12.png";
 import { useNavigate } from "react-router-dom";
 
 import { http } from '@/lib/http' ;
+import {observeResult} from '@/lib/result-observer';
 import { quizApi } from '@/api/quiz' ;
 export default function FinalResultPage() {
     const avatars = [
@@ -49,8 +50,8 @@ export default function FinalResultPage() {
   }
   const location = useLocation();
   const search = new URLSearchParams(location.search);
-  const roomId = useMemo(() => search.get('roomId') || location.state?.roomId || sessionStorage.getItem('roomId') || 'general', [location.search, location.state]);
-  const nickname = useMemo(() => search.get('nickname') || location.state?.nickname || sessionStorage.getItem('nickname') || '', [location.search, location.state]);
+  const roomId = useMemo(() => search.get('roomId') || location.state?.roomId || sessionStorage.getItem('lastRoomId') || sessionStorage.getItem('roomId') || 'general', [location.search, location.state]);
+  const nickname = useMemo(() => search.get('nickname') || location.state?.nickname || sessionStorage.getItem('myNickname') || sessionStorage.getItem('nickname') || '', [location.search, location.state]);
   const learnedAtStr = useMemo(() => new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric' }), []);
   const { avatarUrl,isAdmin,setIsAdmin } = useUser();
   const isAdminEffective = isAdmin;
@@ -63,8 +64,9 @@ export default function FinalResultPage() {
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const [quiz, setQuiz] = useState(null);
+  const [refreshVersion, setRefreshVersion] = useState(0);
+  const requestIdentity = useRef(null);
 
-  const selectedVideoSet = lessons.map(lesson => lesson.videoId);
 
   const donutRef = useRef(null);
   const lineRef = useRef(null);
@@ -73,8 +75,6 @@ export default function FinalResultPage() {
   // ADD
   const barsRef = useRef(null);
   const barsChartRef = useRef(null);
-  // Track which nicknames have already had pre-generation fired
-  const pregenFiredRef = useRef(new Set());
 
   async function ensureChartJS(){
     if (window.Chart) return window.Chart;
@@ -87,70 +87,44 @@ export default function FinalResultPage() {
   }
 
   useEffect(() => {
-    let aborted = false;
-    async function fetchData(){
-      setLoading(true); setError('');
-      try {
-        // 멀티 비디오 통합 결과 호출
-        const created = await http.post(`/api/review/${encodeURIComponent(roomId)}/multi-final-result`, {
-          nickname: effectiveNick || '',
-          videoIds: selectedVideoSet,
-        });
-        console.log('[FinalResultPage] multi-final-result:', created);
-        if (!aborted) setData(created);
-      } catch (e) {
-        if (!aborted) {
-          setData(null);
-          setError('종합 결과를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-        }
-      } finally {
-        // 3) 퀴즈 결과는 GET/POST 결과와 무관하게 시도
-        try{
-          const qres = isAdminEffective ? null : await quizApi.getMyScores();
-          if (!aborted) setQuiz({ rounds: quizResults(qres) });
-        } catch {
-          if (!aborted) setQuiz({ rounds: quizResults(null) });
-        }
-        if (!aborted) setLoading(false);
-      }
-    }
-    fetchData();
-    return () => { aborted = true };
-  }, [roomId, effectiveNick, isAdminEffective]);
+    const identity = JSON.stringify([roomId, effectiveNick]);
+    if (requestIdentity.current !== identity) {setLoading(true); setData(null);}
+    requestIdentity.current = identity;
+    setError('');
+    let firstRequest = true;
+    const observer = observeResult({
+      load:signal => {
+        const retryAI = firstRequest && refreshVersion > 0;
+        firstRequest = false;
+        return http.post(`/api/review/${encodeURIComponent(roomId)}/multi-final-result`, {
+          nickname:effectiveNick || '', videoIds:lessons.map(lesson=>lesson.videoId), deferAI:true, retryAI,
+        }, {}, {signal});
+      },
+      onData:result => {setData(result); setLoading(false); setError('');},
+      onError:(_error, retrying) => {
+        if (!retrying) {setLoading(false); setError('결과 갱신이 중단되었습니다. 다시 시도해 주세요.');}
+      },
+      isPending:result => result.sections?.aiSummaryStatus === 'pending' || result.sections?.classification?.status === 'pending',
+    });
+    return () => observer.stop();
+  }, [roomId, effectiveNick, refreshVersion]);
 
-  // Log when data/quiz states are updated (for real API integration later)
+  // Quiz results are independent of the AI summary and dashboard request.
   useEffect(() => {
-    if (data?.sections) {
-      try { console.log('[FinalResultPage] sections (state):', data.sections); } catch {}
-    }
-    if (quiz?.rounds) {
-      try { console.log('[FinalResultPage] quiz (state):', quiz.rounds); } catch {}
-    }
-  }, [data, quiz]);
+    let aborted = false;
+    setQuiz(null);
+    (async () => {
+      try {
+        const result = isAdminEffective ? null : await quizApi.getMyScores();
+        if (!aborted) setQuiz({rounds:quizResults(result)});
+      } catch {
+        if (!aborted) setQuiz({rounds:quizResults(null)});
+      }
+    })();
+    return () => {aborted = true;};
+  }, [roomId, isAdminEffective]);
 
   const sections = data?.sections;
-  // Admin pre-generation: when admin opens FinalResultPage, trigger generation for all users once
-  useEffect(() => {
-    if (!isAdminEffective) return;
-    if (!roomId) return;
-    const ranking = Array.isArray(sections?.ranking) ? sections.ranking : [];
-    if (!ranking.length) return;
-    const uniqNicks = Array.from(new Set(ranking.map((r) => r?.nickname).filter(Boolean)));
-    // stagger to avoid burst
-    uniqNicks.forEach((nick, idx) => {
-      if (nick === effectiveNick) return; // skip the one we're currently viewing
-      const key = `${roomId}::${nick}`;
-      if (pregenFiredRef.current.has(key)) return;
-      pregenFiredRef.current.add(key);
-      setTimeout(() => {
-        http.post(`/api/review/${encodeURIComponent(roomId)}/multi-final-result`, {
-          nickname: nick,
-          videoIds: selectedVideoSet,
-        }).catch(() => {/* swallow errors; this is best-effort pregen */});
-      }, idx * 300);
-    });
-  }, [isAdminEffective, roomId, sections?.ranking, effectiveNick]);
-
 
   // --- Adapt server's video-based arrays to the existing round-based variables (UI text unchanged) ---
   const videoAsRounds = useMemo(() => {
@@ -574,14 +548,14 @@ export default function FinalResultPage() {
       </div>
     );
   }
-  if (error){
+  if (error && !data){
     return (
       <div className="final-result-page">
         <div className="frp-topbar">
           <h2 className="frp-topbar__title">{effectiveNick ? `${effectiveNick}의 학습 레포트` : '학습 레포트'}</h2>
           <div className="frp-topbar__date">학습일: {learnedAtStr}</div>
         </div>
-        <div style={{padding:20,color:'#c0392b'}}>{error}</div>
+        <div style={{padding:20,color:'#c0392b'}}>{error} <button onClick={()=>setRefreshVersion(v=>v+1)}>다시 시도</button></div>
       </div>
     );
   }
@@ -614,6 +588,11 @@ export default function FinalResultPage() {
         <div className="frp-topbar__date">학습일: {learnedAtStr}</div>
       </div>
 
+<div className="frp-result-status" aria-live="polite">
+{error && <p role="alert">{error} <button onClick={()=>setRefreshVersion(v=>v+1)}>다시 시도</button></p>}
+{sections?.classification?.status === 'pending' && <p role="status">발언 분석 {sections.classification.pending}건을 집계 중입니다. 점수와 순위는 완료 후 갱신됩니다.</p>}
+{sections?.classification?.status === 'partial' && <p role="status">일부 발언 분석에 실패하여 점수와 순위에 반영되지 않았습니다.</p>}
+</div>
 <div className='frp-dashboard'>
       {/* SECTION 1: 통합 등수/점수 + AI 요약 + 학습 완수율(총괄 메시지/반응을 진행률처럼 표시) */}
       <section className="frp-section frp-section--1">
@@ -646,12 +625,16 @@ export default function FinalResultPage() {
           <header className="frp-card__header">
             <h3>AI 요약</h3>
           </header>
+          {sections?.aiSummaryStatus === 'error' && <button type="button" onClick={()=>setRefreshVersion(v=>v+1)}>AI 피드백 다시 시도</button>}
           <div className="frp-ai-summary__body">
             <img className="frp-ai-summary__icon" src={aiIcon} alt="AI" />
             {aiSummary ? (
               <p className="frp-ai-summary__text">{aiSummary}</p>
             ) : (
-              <p className="frp-ai-summary__text">요약이 없습니다. (내 발화가 부족하거나 AI 요약 비활성화)</p>
+              <p className="frp-ai-summary__text" role="status">{sections?.aiSummaryStatus === 'pending'
+                ? 'AI 피드백을 작성 중입니다. 준비되는 대로 자동으로 표시됩니다.'
+                : sections?.aiSummaryStatus === 'error' ? 'AI 피드백을 불러오지 못했습니다. 기본 결과는 확인할 수 있습니다.'
+                : '요약할 발언이 없습니다.'}</p>
             )}
           </div>
         </article>

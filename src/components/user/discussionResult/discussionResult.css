@@ -557,3 +557,7 @@ box-sizing: border-box;
   .discussion-result-main.is-admin .dr-hero-summary-text { font-size: 21px; }
   .discussion-result-main.is-admin .dr-quote { font-size: 20px; }
 }
+/* Result progress belongs to the summary column, outside the horizontal cards. */
+.dr-result-status { width:100%; font-size:14px; line-height:1.5; color:#334155; }
+.dr-result-status p { margin:8px 0; }
+.dr-result-status button { margin-left:8px; }

@@ -3,6 +3,7 @@ import SavePDFButton from "./SavePDFButton";
 import NextSessionButton from "./NextSessionButton";
 import "./discussionResult.css";
 import { http } from '@/lib/http' ;
+import {observeResult} from '@/lib/result-observer';
 import { socket } from '@/api/chat';
 import { useUser } from '@/contexts/UserContext';
 import { useNavigate } from 'react-router-dom';
@@ -97,6 +98,8 @@ export default function DiscussionResultMain() {
   const [avatarMap, setAvatarMap] = useState({}); // { nickname: avatarId }
   const [topicSummaries, setTopicSummaries] = useState([]);
   const [topicLoading, setTopicLoading] = useState(true);
+  const [summaryStatus, setSummaryStatus] = useState('pending');
+  const [refreshVersion, setRefreshVersion] = useState(0);
   function hashNicknameToAvatarId(nick=''){
     let h = 0; for (let i=0;i<nick.length;i++){ h=((h<<5)-h)+nick.charCodeAt(i); h|=0; }
     return String((Math.abs(h)%12)+1);
@@ -117,105 +120,39 @@ export default function DiscussionResultMain() {
     respect: badgeRespect
   };
 
-  // Listen for background topic summaries completion and refetch
   useEffect(() => {
-    function onTopicsReady({ roomId: ridEvt }){
-      const want = sessionStorage.getItem('lastRoomId') || roomId;
-      if (!ridEvt || ridEvt !== want) return;
-      http.get(`/api/chat/result/${encodeURIComponent(want)}`).then((res)=>{
-        if (Array.isArray(res?.topicSummaries?.topics)) {
-          setTopicSummaries(res.topicSummaries.topics);
-          setTopicLoading(false);
-        }
-      }).catch(()=>{});
-    }
-    socket.on('topics:ready', onTopicsReady);
-    return () => socket.off('topics:ready', onTopicsReady);
-  }, []);
-  useEffect(() => {
-    const rid = sessionStorage.getItem("lastRoomId") || "";
-    const nick = sessionStorage.getItem("myNickname") || sessionStorage.getItem("nickname") || "";
-    setRoomId(rid);
-    setMyNickname(nick);
-
-    async function load() {
-      try {
-        setLoading(true);
-        setError("");
-        if (!rid) throw new Error("roomId_missing");
-        // fetch room & my results in parallel (http.get returns parsed JSON or throws)
-        const roomReq = http.get(`/api/chat/result/${encodeURIComponent(rid)}`);
-        const myReq = nick ? http.get(`/api/chat/my-result?nickname=${encodeURIComponent(nick)}`) : Promise.resolve(null);
-        const [roomOutcome, myOutcome] = await Promise.allSettled([roomReq, myReq]);
-
-        if (roomOutcome.status !== 'fulfilled') throw roomOutcome.reason || new Error('room_result_error');
-        const roomData = roomOutcome.value;
-        setRoomResult(roomData);
-        console.log("[DiscussionResultMain] roomData", roomData);
-        if (roomData && roomData.avatarMap && typeof roomData.avatarMap === 'object') {
-          setAvatarMap(roomData.avatarMap);
-        }
-        // --- Topic summaries: seed from server if present
-        const firstTopics = Array.isArray(roomData?.topicSummaries?.topics) ? roomData.topicSummaries.topics : [];
-        setTopicSummaries(firstTopics);
-        setTopicLoading(!(firstTopics && firstTopics.length));
-        // --- Overall summary (once per room) ---
-        try {
-          // 1) 조회
-          const getRes = await http.get(`/api/review/${encodeURIComponent(rid)}/overall-summary`);
-          setOverallSummary(getRes?.summaryText || "");
-        } catch (e1) {
-          // 2) 없으면 생성(1회)
-          try {
-            const postRes = await http.post(`/api/review/${encodeURIComponent(rid)}/overall-summary`, {});
-            setOverallSummary(postRes?.summaryText || "");
-          } catch (e2) {
-            setOverallSummary("");
-          }
-        }
-        // --- If topic summaries are empty, refetch after a short delay to check for background completion ---
-        try {
-          if (!roomData?.topicSummaries?.topics?.length) {
-            // refetch fresh result to see if background job filled it in
-            const r2 = await http.get(`/api/chat/result/${encodeURIComponent(rid)}`);
-            if (Array.isArray(r2?.topicSummaries?.topics)) setTopicSummaries(r2.topicSummaries.topics);
-            setTopicLoading(!(r2?.topicSummaries?.topics && r2.topicSummaries.topics.length));
-          }
-        } catch {}
-
-        if (myOutcome.status === 'fulfilled' && myOutcome.value?.roomId === rid) {
-          setMyResult(myOutcome.value);
-          console.log("[DiscussionResultMain] myResult", myOutcome.value);
-        } else {
-          // fallback: derive my result from room perUser
-          if (nick && roomData && roomData.perUser && roomData.perUser[nick]) {
-            const u = roomData.perUser[nick];
-            setMyResult({
-              roomId: rid,
-              rank: (roomData.ranking || []).find(r => r.nickname === nick)?.rank ?? undefined,
-              score: (roomData.ranking || []).find(r => r.nickname === nick)?.score ?? undefined,
-              totalMessages: u.totalMessages,
-              totalReactions: u.totalReactions,
-              labels: u.labels,
-              topReacted: u.topReacted,
-              createdAt: roomData.createdAt,
-            });
-          }
-        }
-      } catch (e) {
-        setRoomResult(null);
-        setMyResult(null);
-        setOverallSummary('');
-        setError('차시 결과를 불러오지 못했습니다. 연결 상태를 확인한 뒤 다시 시도해 주세요.');
-        setTopicLoading(false);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    load();
-
-  }, []);
+    const rid = sessionStorage.getItem('lastRoomId') || '';
+    const nick = sessionStorage.getItem('myNickname') || sessionStorage.getItem('nickname') || '';
+    setRoomId(rid); setMyNickname(nick); setError('');
+    const observer = observeResult({
+      load:signal => {
+        if (!rid) throw new Error('roomId_missing');
+        return http.get(`/api/chat/result/${encodeURIComponent(rid)}`, {}, {signal});
+      },
+      onData:result => {
+        setRoomResult(result); setLoading(false); setError('');
+        setAvatarMap(result.avatarMap || {});
+        setTopicSummaries(result.topicSummaries?.topics || []);
+        setTopicLoading(result.topicSummaries?.status === 'pending');
+        setOverallSummary(result.overallSummary || '');
+        setSummaryStatus(result.overallSummaryStatus || (result.overallSummary ? 'ready' : 'empty'));
+        const user = result.perUser?.[nick];
+        const rank = result.ranking?.find(row => row.nickname === nick);
+        setMyResult(user ? {...user, ...rank, roomId:rid, createdAt:result.createdAt} : null);
+      },
+      onError:(_error, retrying) => {
+        if (!retrying) {setLoading(false); setError('결과 갱신이 중단되었습니다. 다시 시도해 주세요.');}
+      },
+      isPending:result => result.classification?.status === 'pending' ||
+        result.topicSummaries?.status === 'pending' || result.overallSummaryStatus === 'pending',
+    });
+    const refresh = ({roomId:changed} = {}) => {if (!changed || changed === rid) observer.refresh();};
+    for (const event of ['topics:ready','overallSummary:ready','results:updated','connect']) socket.on(event,refresh);
+    return () => {
+      observer.stop();
+      for (const event of ['topics:ready','overallSummary:ready','results:updated','connect']) socket.off(event,refresh);
+    };
+  }, [refreshVersion]);
 
   // Aggregate totals for hero copy (전체)
   const heroTotals = useMemo(() => {
@@ -530,9 +467,17 @@ function koreanOrdinal(n){
                 {overallSummary ? 
                   overallSummary
                  : 
-                  "총평을 준비하고 있습니다…"
+                  (summaryStatus === 'pending' ? 'AI 총평을 작성 중입니다. 준비되는 대로 표시됩니다.' : summaryStatus === 'error' ? 'AI 총평을 불러오지 못했습니다. 기본 결과는 확인할 수 있습니다.' : '요약할 발언이 없습니다.')
                 }
               </div>
+            </div>
+            <div className="dr-result-status" aria-live="polite">
+        {roomResult?.persistenceStatus === 'error' && <p role="alert">결과를 저장하지 못했습니다. 운영자 확인이 필요합니다.</p>}
+        {error && <p role="alert">{error} <button onClick={()=>setRefreshVersion(v=>v+1)}>다시 시도</button></p>}
+        {roomResult?.classification?.status === 'pending' && <p role="status">발언 분석 {roomResult.classification.pending}건을 집계 중입니다. 점수와 순위는 완료 후 갱신됩니다.</p>}
+        {roomResult?.classification?.status === 'partial' && <p role="status">일부 발언 분석에 실패하여 점수와 순위에 반영되지 않았습니다.</p>}
+        {topicLoading && <p role="status">주제별 요약 {roomResult?.topicSummaries?.completed || 0}/{roomResult?.topicSummaries?.total || 0}명 완료 · 준비되는 순서대로 표시됩니다.</p>}
+        {roomResult?.topicSummaries?.status === 'partial' && <p role="status">일부 참여자의 AI 요약을 불러오지 못했습니다.</p>}
             </div>
             <div className="dr-hero-actions">
               <SavePDFButton/>
@@ -564,7 +509,7 @@ function koreanOrdinal(n){
             key={idx}
             trait={t.topic || `토론 주제 ${idx+1}`}
             hideLikes={true}
-            loading={false}
+            loading={topicLoading && !t.summaries?.length}
             members={(t.summaries || []).map(s => ({
               nickname: s.nickname,
               avatar: getAvatarForNickname(s.nickname),

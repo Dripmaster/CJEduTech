@@ -234,13 +234,7 @@ export default function ChatOverView(){
         navigate(isAdmin ? '/admin/discussionResult' : '/user/discussionResult');
       };
 
-      // Admin은 즉시 이동, 일반 사용자는 5초 대기 후 이동
-      if (isAdmin) {
-        go();
-      } else {
-        if (delayTimerRef.current) clearTimeout(delayTimerRef.current);
-        delayTimerRef.current = setTimeout(go, 5000);
-      }
+      go();
     });
 
     // room:expired는 이제 이동 트리거가 아니라, 화면에서 방 상태를 종료 처리하는 용도로만 사용

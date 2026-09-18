@@ -9,12 +9,14 @@ async function request(path, opts = {}) {
     headers = {},
     body = undefined,
     credentials = 'omit',
+    signal,
   } = opts;
 
   const url = `${API_BASE}${path}`;
 
   const init = {
     method,
+    signal,
     mode: 'cors',
     credentials,
     headers: { ...headers, ...(sessionStorage.getItem(TOKEN_KEY) ? { Authorization: `Bearer ${sessionStorage.getItem(TOKEN_KEY)}` } : {}) },
@@ -56,8 +58,8 @@ async function request(path, opts = {}) {
 }
 
 export const http = {
-  get: (p, headers) => request(p, { method: 'GET', headers }),
-  post: (p, b, headers) => request(p, { method: 'POST', body: b, headers }),
+  get: (p, headers, options = {}) => request(p, { ...options, method: 'GET', headers }),
+  post: (p, b, headers, options = {}) => request(p, { ...options, method: 'POST', body: b, headers }),
   put: (p, b, headers) => request(p, { method: 'PUT', body: b, headers }),
   del: (p, headers) => request(p, { method: 'DELETE', headers }),
 };
