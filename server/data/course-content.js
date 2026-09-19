@@ -4,7 +4,7 @@ export const activities = [
     "lessonId": 2,
     "videoId": 0,
     "videoKey": "financial_1",
-    "videoSrc": null,
+    "videoSrc": "https://d32musk4jrqud8.cloudfront.net/new1.mp4",
     "videoTitle": "저축 목표와 계획",
     "sourceScenarioId": 2,
     "topics": [
@@ -22,7 +22,7 @@ export const activities = [
     "lessonId": 3,
     "videoId": 1,
     "videoKey": "financial_2",
-    "videoSrc": null,
+    "videoSrc": "https://d32musk4jrqud8.cloudfront.net/new2.mp4",
     "videoTitle": "보험과 위험 대비",
     "sourceScenarioId": 3,
     "topics": [
