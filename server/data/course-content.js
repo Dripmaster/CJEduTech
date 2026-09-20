@@ -40,7 +40,7 @@ export const activities = [
     "lessonId": 4,
     "videoId": 2,
     "videoKey": "financial_3",
-    "videoSrc": null,
+    "videoSrc": "https://d32musk4jrqud8.cloudfront.net/new3.mp4",
     "videoTitle": "투자 성향과 자산 배분",
     "sourceScenarioId": 4,
     "topics": [
