@@ -34,17 +34,3 @@
 .finance-written-responses article span{margin-left:12px;font-size:13px;color:#626262;}
 .finance-written-responses article p{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:0;}
 @media(max-width:760px){.finance-written,.finance-written-responses{margin-left:0;}}
-
-/* Give the teaching slide the available viewport; keep controls outside the image. */
-.finance-stage-1{height:100vh;height:100dvh;min-height:0;display:flex;flex-direction:column;background:#fff;}
-.finance-stage-1>.page-header{flex:0 0 auto;height:auto;min-height:36px;padding:3px 12px;background:#fff;border-bottom:1px solid #eee;}
-.finance-stage-1>.page-header .title{margin:0;font-size:14px;}
-.finance-stage-1>.page-header .user-info{min-width:0;}
-.finance-stage-1>.page-header .avatar-icon,.finance-stage-1>.page-header .nickname{display:none;}
-.finance-stage-1>.page-header .leave-button{padding:4px 10px;font-size:12px;}
-.finance-stage-1>.finance-content{flex:1;min-height:0;display:flex;flex-direction:column;margin:0;padding:4px 8px;border:0;border-radius:0;box-shadow:none;}
-.finance-stage-1 .finance-slide{flex:1;min-height:0;}
-.finance-stage-1 .finance-slide img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;}
-.finance-stage-1 .finance-controls{flex:0 0 auto;min-height:36px;padding:4px 0 0;gap:8px;font-size:12px;}
-.finance-stage-1 .finance-controls button{padding:5px 14px;font-size:13px;border-radius:8px;}
-.finance-stage-1 .finance-error{margin:4px 0;font-size:13px;}

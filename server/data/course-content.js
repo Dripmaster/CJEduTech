@@ -58,7 +58,7 @@ export const activities = [
     "lessonId": 3,
     "videoId": 3,
     "videoKey": "financial_4",
-    "videoSrc": null,
+    "videoSrc": "https://d32musk4jrqud8.cloudfront.net/new4.mp4",
     "videoTitle": "노후 생활비와 준비",
     "sourceScenarioId": 5,
     "topics": [
