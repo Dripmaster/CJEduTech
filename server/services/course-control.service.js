@@ -21,6 +21,7 @@ export function initCourseControl(io) {
       const lesson=lessons.find(l=>l.id===payload?.round);
       const pages=lesson ? (lesson.id===1 ? [1,2,3,4,...lesson.theoryPages] : lesson.theoryPages) : [];
       if(!pages.includes(payload?.page)) return respond({ok:false,error:'현재 차시의 이론 슬라이드가 아닙니다.'});
+      if(state && lesson.id < state.round) return respond({ok:false,error:'이미 지난 차시입니다. 현재 수업 차시를 확인해 주세요.'});
       if(state?.round===lesson.id && state.step!==1) return respond({ok:false,error:'이미 다음 단계를 시작했습니다.'});
       if(state?.round!==lesson.id || state?.page!==payload.page || state?.step!==1)
         state={round:lesson.id,step:1,page:payload.page,commandId:randomUUID()};
@@ -35,6 +36,10 @@ export function initCourseControl(io) {
       }
       if (!Number.isInteger(payload?.round) || payload.round < 1 || payload.round > 4) {
         respond({ok:false, error:'차시는 1~4여야 합니다.'});
+        return;
+      }
+      if (state && payload.round < state.round) {
+        respond({ok:false, error:'이미 지난 차시입니다. 현재 수업 차시를 확인해 주세요.'});
         return;
       }
       // Keep legacy event names during rollout. Lessons 3/4 continue at video.
