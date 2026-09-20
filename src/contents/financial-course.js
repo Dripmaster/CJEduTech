@@ -44,17 +44,18 @@ export function lessonSteps(round) {
   return STEPS.map((label, index) => ({step: index + 1, label}))
     .filter(item => (item.step !== 2 || lesson.quizEnabled) && (item.step < 3 || lesson.activityIds.length));
 }
-export function syncTarget(state, progress, live) {
+export function syncTarget(state, progress) {
   if (!state?.commandId || !Number.isInteger(state.round) || state.round < 1 || state.round > 4) return null;
+  // Live broadcasts and reconnect snapshots must both preserve completed progress.
+  if (progress.round > state.round) return null;
   if(state.step === 1) {
     if(!theoryPages(state.round).includes(state.page)) return null;
     // Late slide packets must not rewind a student already doing this lesson's quiz/video.
     if(progress.round === state.round && progress.step > 1) return null;
-    if(!live && progress.round > state.round) return null;
     return {step:1,path:'slide',label:'이론'};
   }
   const target = afterTheory(state.round);
-  if (!live && (progress.round > state.round || (progress.round === state.round && progress.step >= target.step))) return null;
+  if (progress.round === state.round && progress.step >= target.step) return null;
   return target;
 }
 export function nextLesson(round) {
