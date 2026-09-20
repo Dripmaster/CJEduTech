@@ -1,4 +1,4 @@
-import { activities, getActivity, quizResults } from '../../contents/financial-course.js';
+import { activities, getActivity, quizResults, quizResultsFromAnswers } from '../../contents/financial-course.js';
 import badgeJustice from '@/assets/images/discussion/badge_1.png';
 import badgePassion from '@/assets/images/discussion/badge_2.png';
 import badgeRespect from '@/assets/images/discussion/badge_4.png';
@@ -28,7 +28,7 @@ import { useNavigate } from "react-router-dom";
 
 import { http } from '@/lib/http' ;
 import {observeResult} from '@/lib/result-observer';
-import { quizApi } from '@/api/quiz' ;
+import { quizApi,flushPendingQuizAnswers } from '@/api/quiz' ;
 export default function FinalResultPage() {
     const avatars = [
       { id: '1', src: avatar1 },
@@ -64,6 +64,8 @@ export default function FinalResultPage() {
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const [quiz, setQuiz] = useState(null);
+  const [quizError,setQuizError]=useState(false);
+  const [quizRefresh,setQuizRefresh]=useState(0);
   const [refreshVersion, setRefreshVersion] = useState(0);
   const requestIdentity = useRef(null);
 
@@ -116,17 +118,18 @@ export default function FinalResultPage() {
   // Quiz results are independent of the AI summary and dashboard request.
   useEffect(() => {
     let aborted = false;
-    setQuiz(null);
+    setQuiz(null);setQuizError(false);
     (async () => {
       try {
-        const result = isAdminEffective ? null : await quizApi.getMyScores();
-        if (!aborted) setQuiz({rounds:quizResults(result)});
+        if(!isAdminEffective)await flushPendingQuizAnswers();
+        const responses=isAdminEffective?[]:await Promise.all([1,2].map(round=>quizApi.getResponse(round)));
+        if (!aborted) setQuiz({rounds:quizResultsFromAnswers({1:responses[0]?.answers,2:responses[1]?.answers})});
       } catch {
-        if (!aborted) setQuiz({rounds:quizResults(null)});
+        if (!aborted) setQuizError(true);
       }
     })();
     return () => {aborted = true;};
-  }, [roomId, isAdminEffective]);
+  }, [roomId, isAdminEffective,quizRefresh]);
 
   const sections = data?.sections;
 
@@ -648,7 +651,9 @@ export default function FinalResultPage() {
             <h3>차시별 퀴즈 결과</h3>
           </header>
           <div className="frp-completion__body">
-            <p>{isAdminEffective ? '개별 퀴즈 점수는 학생 본인의 종합 화면에서 확인할 수 있습니다.' : '1·2차시 선택형 문항의 정답 수입니다. 3·4차시는 퀴즈를 진행하지 않습니다.'}</p>
+            <p>{isAdminEffective ? '개별 퀴즈 점수는 학생 본인의 종합 화면에서 확인할 수 있습니다.' : '자동 저장된 1·2차시 선택형 답안의 정답 수입니다. 서답형은 채점하지 않으며, 3·4차시는 퀴즈가 없습니다.'}</p>
+            {quizError && <p role="alert">퀴즈 답안을 불러오지 못했습니다. <button onClick={()=>setQuizRefresh(v=>v+1)}>다시 불러오기</button></p>}
+            {!quiz && !quizError && <p role="status">퀴즈 답안을 불러오는 중입니다.</p>}
             <div className="frp-completion__details">
               <ul className="frp-circle-list">
                 {(quiz?.rounds || quizResults(null)).map(result => (
@@ -656,7 +661,7 @@ export default function FinalResultPage() {
                     <div className="frp-circle__ring">
                       <div className="frp-circle__value">{result.correctCount == null ? '—' : `${result.correctCount}/${result.totalQuestions}`}</div>
                     </div>
-                    <div className="frp-circle__label">{result.round_number}차시 · {result.status === 'not_applicable' ? '퀴즈 없음' : result.totalQuestions ? (isAdminEffective ? '학생 화면에서 확인' : result.correctCount == null ? '기록 없음' : '정답') : '자료 준비 중'}</div>
+                    <div className="frp-circle__label">{result.round_number}차시 · {result.status === 'not_applicable' ? '퀴즈 없음' : result.totalQuestions ? (isAdminEffective ? '학생 화면에서 확인' : quizError ? '조회 실패' : !quiz ? '조회 중' : result.correctCount == null ? '미응답' : result.status==='partial' ? `정답 · 미응답 ${result.unansweredCount}개` : '정답') : '자료 준비 중'}</div>
                   </li>
                 ))}
               </ul>

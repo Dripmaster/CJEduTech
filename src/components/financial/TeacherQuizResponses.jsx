@@ -18,6 +18,6 @@ export default function TeacherQuizResponses({round,questionId}) {
   <h3>학생 답안 <small>저장된 답안이 자동으로 갱신됩니다.</small></h3>
   {error && <p role="alert">{error}</p>}
   {loading ? <p role="status">답안을 불러오는 중입니다.</p> : !written.length && <p>아직 저장된 답안이 없습니다.</p>}
-  {written.map(row=><article key={row.nickname}><strong>{row.nickname}</strong><span>{row.submittedAt?'제출 완료':'임시 저장'}</span><p>{row.answers[questionId]}</p></article>)}
+  {written.map(row=><article key={row.nickname}><strong>{row.nickname}</strong><span>{row.submittedAt?'작성 완료':'작성 중 · 자동 저장'}</span><p>{row.answers[questionId]}</p></article>)}
  </section>;
 }

@@ -92,3 +92,17 @@ export function quizResults(scores) {
     return { status: !lesson.quizEnabled ? 'not_applicable' : valid ? 'recorded' : 'missing', round_number: lesson.id, totalQuestions: total, correctCount: valid ? Math.round(score * total) : null, correctRate: valid ? score * 100 : null };
   });
 }
+
+// Read saved answers directly: a separate submit click must not be required for results.
+export function quizResultsFromAnswers(responses) {
+  return lessons.map(lesson => {
+    const answers=responses?.[lesson.id]||{};
+    const result=scoreQuiz(lesson.id,answers);
+    const questions=lesson.quizPages.flatMap(page=>page.questions).filter(q=>q.kind==='choice');
+    const answered=questions.filter(q=>Number.isInteger(answers[q.id]) && answers[q.id]>=0 && answers[q.id]<q.options.length).length;
+    return {round_number:lesson.id,totalQuestions:result.total,
+      status:!lesson.quizEnabled?'not_applicable':!answered?'missing':result.complete?'recorded':'partial',
+      correctCount:answered?result.correct:null,correctRate:answered?result.correct/result.total*100:null,
+      unansweredCount:result.total-answered};
+  });
+}

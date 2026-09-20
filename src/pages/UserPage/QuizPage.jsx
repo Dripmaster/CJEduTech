@@ -4,7 +4,7 @@ import { useRoundStep } from '../../contexts/RoundStepContext';
 import { useUser } from '../../contexts/UserContext';
 import { getLesson, scoreQuiz, afterQuiz } from '../../contents/financial-course.js';
 import {QUIZ_TEXT_LIMIT,validateAnswers} from '../../../server/data/quiz-rules.js';
-import { quizApi } from '../../api/quiz';
+import { quizApi,getAnswerSaver } from '../../api/quiz';
 import CourseShell from '../../components/financial/CourseShell';
 import TeacherQuizResponses from '../../components/financial/TeacherQuizResponses';
 const draftKey=(nickname,round)=>`financial-education.quiz-draft.${encodeURIComponent(nickname)}.${round}`;
@@ -24,11 +24,14 @@ function QuizContent() {
   const [pageIndex, setPageIndex] = useState(0);
   const [answers, setAnswers] = useState(()=>readDraft(key,round));
   const [revealed, setRevealed] = useState({});
-  const [saving, setSaving] = useState(false);
+  const [finishing,setFinishing]=useState(false);
+  const [saveStatus,setSaveStatus]=useState('idle');
+  const [saver]=useState(()=>isAdmin?null:getAnswerSaver(round,key));
+  const answersRef=useRef(answers);
   const [loaded,setLoaded]=useState(isAdmin);
   const [error, setError] = useState('');
   const [loadError,setLoadError]=useState('');
-  const [notice,setNotice]=useState('');
+
   const [loadVersion,setLoadVersion]=useState(0);
   const active=useRef(true);
   const page = lesson.quizPages[pageIndex];
@@ -42,37 +45,47 @@ function QuizContent() {
     if(isAdmin || !lesson.quizEnabled) return;
     let cancelled=false;
     setLoaded(false);setLoadError('');
-    quizApi.getResponse(round).then(saved=>{
+    Promise.resolve(saver?.flush()).catch(()=>{}).then(()=>quizApi.getResponse(round)).then(saved=>{
       if(cancelled)return;
       const local=readDraft(key,round);
-      setAnswers(Object.keys(local).length?local:saved.answers||{});
-      if(saved.submittedAt)setNotice('제출한 답안을 다시 확인하거나 수정할 수 있습니다.');
+      const restored=Object.keys(local).length?local:saved.answers||{};
+      answersRef.current=restored;setAnswers(restored);
+      if(Object.keys(local).length)saver.set(local);
     }).catch(()=>{if(!cancelled)setLoadError('서버의 이전 답안을 불러오지 못했습니다. 이 탭에 남은 작성 내용은 유지됩니다.');})
       .finally(()=>{if(!cancelled)setLoaded(true);});
     return()=>{cancelled=true;};
-  },[isAdmin,lesson.quizEnabled,round,key,loadVersion]);
-  useEffect(()=>{if(loaded && !isAdmin)try{sessionStorage.setItem(key,JSON.stringify(answers));}catch{/* Server save remains available when browser storage is full. */}},[loaded,isAdmin,key,answers]);
+  },[isAdmin,lesson.quizEnabled,round,key,loadVersion,saver]);
+  useEffect(()=>{
+    if(!saver)return;
+    const unsubscribe=saver.subscribe(setSaveStatus);
+    const flush=()=>{void saver.flush().catch(()=>{});};
+    const leave=event=>{if(['saving','error'].includes(saver.status)){flush();event.preventDefault();event.returnValue='';}};
+    window.addEventListener('online',flush);
+    window.addEventListener('beforeunload',leave);
+    return()=>{unsubscribe();window.removeEventListener('online',flush);window.removeEventListener('beforeunload',leave);flush();};
+  },[saver]);
   useEffect(() => {
     if (!lesson.quizEnabled && step !== 3) setStep(3);
   }, [lesson.quizEnabled, step, setStep]);
-  const change=(id,value)=>{setAnswers(prev=>({...prev,[id]:value}));setNotice('');};
-  const save=async submit=>{
-    if(saving || !loaded || (submit && !complete))return;
-    setSaving(true);setError('');setNotice('');
-    try {
-      if(submit) await quizApi.submitAnswers(round,answers);
-      else await quizApi.saveDraft(round,answers);
-      if(!active.current)return;
-      if(submit){sessionStorage.removeItem(key);next();}
-      else setNotice('답안을 임시 저장했습니다.');
-    } catch {if(active.current)setError('답안을 저장하지 못했습니다. 작성 내용은 유지됩니다. 연결 상태를 확인하고 다시 저장해 주세요.');}
-    finally {if(active.current)setSaving(false);}
+  const change=(id,value)=>{
+    const updated={...answersRef.current,[id]:value};
+    answersRef.current=updated;setAnswers(updated);setError('');
+    if(isAdmin)return;
+    try{sessionStorage.setItem(key,JSON.stringify(updated));}catch{/* Server saving still works. */}
+    saver.set(updated,typeof value==='string'?400:0);
   };
-  const finish=()=>isAdmin?next():save(true);
+  const finish=async()=>{
+    if(isAdmin){next();return;}
+    if(finishing || !loaded || !complete)return;
+    setFinishing(true);setError('');
+    try{await saver.flush();if(active.current)next();}
+    catch{if(active.current)setError('답안을 저장하지 못해 이동하지 않았습니다. 연결 상태를 확인하고 다시 시도해 주세요.');}
+    finally{if(active.current)setFinishing(false);}
+  };
   if (!lesson.quizEnabled) return <Navigate to={`/${isAdmin?'admin':'user'}/video`} replace />;
   return <CourseShell stage={2}>
     {!loaded && <p role="status">저장된 답안을 불러오는 중입니다.</p>}
-    {loadError && <p role="alert" className="finance-error">{loadError} <button disabled={saving} onClick={()=>setLoadVersion(v=>v+1)}>다시 불러오기</button></p>}
+    {loadError && <p role="alert" className="finance-error">{loadError} <button disabled={finishing} onClick={()=>setLoadVersion(v=>v+1)}>다시 불러오기</button></p>}
     {!page ? <section className="finance-empty"><h1>{round}차시 퀴즈 자료 준비 중</h1><p>퀴즈 자료가 아직 전달되지 않았습니다.</p></section> : <>
       <div className="finance-page-title"><h1>{page.title.replace(/\s+[12]-[124]\s+(확인 문제|상황 판단)$/,'')}</h1><span>{round}차시 · 확인 문제 · 원본 {page.page}쪽</span></div>
       <div className="finance-questions">{page.questions.map(question => {
@@ -80,10 +93,10 @@ function QuizContent() {
         const showAnswer = revealed[question.id];
         return <section className="finance-question" key={question.id}>
           <div className="finance-question-heading"><span className="finance-q">Q</span><h2>{question.q}</h2></div>
-          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={saving || !loaded} className={selected===index ? 'selected' : ''} onClick={() => change(question.id,index)}>{option}</button>)}</div>}
+          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={finishing || !loaded} className={selected===index ? 'selected' : ''} onClick={() => change(question.id,index)}>{option}</button>)}</div>}
           {question.kind==='written' && (isAdmin ? <TeacherQuizResponses round={round} questionId={question.id}/> : <div className="finance-written">
             <label htmlFor={question.id}>내 답변</label>
-            <textarea id={question.id} aria-label={question.q} value={selected||''} disabled={saving || !loaded} maxLength={QUIZ_TEXT_LIMIT} rows={3} placeholder="자신의 생각을 문장으로 작성해 주세요." onChange={event=>change(question.id,event.target.value)}/>
+            <textarea id={question.id} aria-label={question.q} value={selected||''} disabled={finishing || !loaded} maxLength={QUIZ_TEXT_LIMIT} rows={3} placeholder="자신의 생각을 문장으로 작성해 주세요." onChange={event=>change(question.id,event.target.value)}/>
             <small>{(selected||'').length} / {QUIZ_TEXT_LIMIT}자 · 자동 채점하지 않는 문항입니다.</small>
           </div>)}
           {showAnswer ? <p className="finance-explanation"><strong>A.</strong> {question.explanation}</p> : <button className="finance-reveal" disabled={!isAdmin && (question.kind==='choice'?selected===undefined:!selected?.trim())} onClick={() => setRevealed(prev => ({...prev,[question.id]:true}))}>{question.kind==='written'?'예시 답안·해설 보기':'정답·해설 보기'}</button>}
@@ -91,12 +104,12 @@ function QuizContent() {
         </section>;
       })}</div>
       {error && <p className="finance-error" role="alert">{error}</p>}
-      {notice && <p role="status">{notice}</p>}
-      <footer className="finance-controls"><button disabled={pageIndex===0 || saving} onClick={() => setPageIndex(pageIndex-1)}>이전 페이지</button><span>{pageIndex+1} / {lesson.quizPages.length}</span>
-        {!isAdmin && <button disabled={saving || !loaded} onClick={()=>save(false)}>{saving?'저장 중…':'답안 임시 저장'}</button>}
-        {pageIndex < lesson.quizPages.length-1 ? <button disabled={saving} onClick={() => setPageIndex(pageIndex+1)}>다음 페이지</button> : <button className="primary" disabled={saving || (!isAdmin && (!complete || !loaded))} onClick={finish}>{saving ? '저장 중…' : isAdmin ? `${target.label}으로 이동` : `답안 제출 후 ${target.label}으로 이동`}</button>}
+      {!isAdmin && saveStatus==='error' && <p className="finance-error" role="alert">자동 저장에 실패했습니다. 작성 내용은 이 탭에 보관되어 있습니다. <button onClick={()=>saver.flush().catch(()=>{})}>다시 시도</button></p>}
+      {!isAdmin && <p role="status">{saveStatus==='saving'?'자동 저장 중…':saveStatus==='saved'?'자동 저장됨':''}</p>}
+      <footer className="finance-controls"><button disabled={pageIndex===0 || finishing} onClick={() => setPageIndex(pageIndex-1)}>이전 페이지</button><span>{pageIndex+1} / {lesson.quizPages.length}</span>
+        {pageIndex < lesson.quizPages.length-1 ? <button disabled={finishing} onClick={() => setPageIndex(pageIndex+1)}>다음 페이지</button> : <button className="primary" disabled={finishing || (!isAdmin && (!complete || !loaded))} onClick={finish}>{finishing ? '저장 중…' : `${target.label}으로 이동`}</button>}
       </footer>
-      {!isAdmin && <p className="finance-note">{written.length?'선택형과 서답형에 모두 답하면 제출할 수 있습니다. 서답형은 점수에 포함하지 않습니다.':'선택형 문항에 모두 답하면 제출할 수 있습니다.'} 작성 중인 내용은 이 탭에 보관됩니다. 다른 기기에서도 확인하려면 임시 저장해 주세요.</p>}
+      {!isAdmin && <p className="finance-note">{written.length?'선택형과 서답형에 모두 답하면 다음으로 이동할 수 있습니다. 서답형은 점수에 포함하지 않습니다.':'선택형 문항에 모두 답하면 다음으로 이동할 수 있습니다.'} 보기를 선택하거나 답변을 작성하면 자동 저장됩니다. 저장 후에도 답을 바꿀 수 있습니다.</p>}
     </>}
   </CourseShell>;
 }
