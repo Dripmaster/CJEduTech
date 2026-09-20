@@ -23,7 +23,14 @@ function QuizContent() {
   const key=draftKey(nickname,round);
   const [pageIndex, setPageIndex] = useState(0);
   const [answers, setAnswers] = useState(()=>readDraft(key,round));
-  const [revealed, setRevealed] = useState({});
+  const revealKey=`${key}.revealed`;
+  const [revealed, setRevealed] = useState(()=>{
+    if(isAdmin)return {};
+    try{
+      const stored=JSON.parse(sessionStorage.getItem(revealKey))||{};
+      return Object.fromEntries(lesson.quizPages.flatMap(p=>p.questions).filter(q=>stored[q.id]===true).map(q=>[q.id,true]));
+    }catch{return {};}
+  });
   const [finishing,setFinishing]=useState(false);
   const [saveStatus,setSaveStatus]=useState('idle');
   const [saver]=useState(()=>isAdmin?null:getAnswerSaver(round,key));
@@ -67,7 +74,13 @@ function QuizContent() {
   useEffect(() => {
     if (!lesson.quizEnabled && step !== 3) setStep(3);
   }, [lesson.quizEnabled, step, setStep]);
+  const reveal=id=>{
+    const updated={...revealed,[id]:true};
+    setRevealed(updated);
+    if(!isAdmin)try{sessionStorage.setItem(revealKey,JSON.stringify(updated));}catch{/* The current view still locks the answer. */}
+  };
   const change=(id,value)=>{
+    if(revealed[id])return;
     const updated={...answersRef.current,[id]:value};
     answersRef.current=updated;setAnswers(updated);setError('');
     if(isAdmin)return;
@@ -93,13 +106,13 @@ function QuizContent() {
         const showAnswer = revealed[question.id];
         return <section className="finance-question" key={question.id}>
           <div className="finance-question-heading"><span className="finance-q">Q</span><h2>{question.q}</h2></div>
-          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={finishing || !loaded} className={selected===index ? 'selected' : ''} onClick={() => change(question.id,index)}>{option}</button>)}</div>}
+          {question.kind === 'choice' && <div className="finance-options" role="group" aria-label={question.q}>{question.options.map((option,index) => <button key={option} aria-pressed={selected===index} disabled={showAnswer || finishing || !loaded} className={selected===index ? 'selected' : ''} onClick={() => change(question.id,index)}>{option}</button>)}</div>}
           {question.kind==='written' && (isAdmin ? <TeacherQuizResponses round={round} questionId={question.id}/> : <div className="finance-written">
             <label htmlFor={question.id}>내 답변</label>
-            <textarea id={question.id} aria-label={question.q} value={selected||''} disabled={finishing || !loaded} maxLength={QUIZ_TEXT_LIMIT} rows={3} placeholder="자신의 생각을 문장으로 작성해 주세요." onChange={event=>change(question.id,event.target.value)}/>
+            <textarea id={question.id} aria-label={question.q} value={selected||''} disabled={showAnswer || finishing || !loaded} maxLength={QUIZ_TEXT_LIMIT} rows={3} placeholder="자신의 생각을 문장으로 작성해 주세요." onChange={event=>change(question.id,event.target.value)}/>
             <small>{(selected||'').length} / {QUIZ_TEXT_LIMIT}자 · 자동 채점하지 않는 문항입니다.</small>
           </div>)}
-          {showAnswer ? <p className="finance-explanation"><strong>A.</strong> {question.explanation}</p> : <button className="finance-reveal" disabled={!isAdmin && (question.kind==='choice'?selected===undefined:!selected?.trim())} onClick={() => setRevealed(prev => ({...prev,[question.id]:true}))}>{question.kind==='written'?'예시 답안·해설 보기':'정답·해설 보기'}</button>}
+          {showAnswer ? <p className="finance-explanation"><strong>A.</strong> {question.explanation}</p> : <button className="finance-reveal" disabled={!isAdmin && (question.kind==='choice'?selected===undefined:!selected?.trim())} onClick={() => reveal(question.id)}>{question.kind==='written'?'예시 답안·해설 보기':'정답·해설 보기'}</button>}
           {question.kind==='choice' && showAnswer && selected!==undefined && <span className="finance-feedback" role="status">{selected===question.answer ? '정답입니다.' : '해설을 확인해 주세요.'}</span>}
         </section>;
       })}</div>
@@ -109,7 +122,7 @@ function QuizContent() {
       <footer className="finance-controls"><button disabled={pageIndex===0 || finishing} onClick={() => setPageIndex(pageIndex-1)}>이전 페이지</button><span>{pageIndex+1} / {lesson.quizPages.length}</span>
         {pageIndex < lesson.quizPages.length-1 ? <button disabled={finishing} onClick={() => setPageIndex(pageIndex+1)}>다음 페이지</button> : <button className="primary" disabled={finishing || (!isAdmin && (!complete || !loaded))} onClick={finish}>{finishing ? '저장 중…' : `${target.label}으로 이동`}</button>}
       </footer>
-      {!isAdmin && <p className="finance-note">{written.length?'선택형과 서답형에 모두 답하면 다음으로 이동할 수 있습니다. 서답형은 점수에 포함하지 않습니다.':'선택형 문항에 모두 답하면 다음으로 이동할 수 있습니다.'} 보기를 선택하거나 답변을 작성하면 자동 저장됩니다. 저장 후에도 답을 바꿀 수 있습니다.</p>}
+      {!isAdmin && <p className="finance-note">{written.length?'선택형과 서답형에 모두 답하면 다음으로 이동할 수 있습니다. 서답형은 점수에 포함하지 않습니다.':'선택형 문항에 모두 답하면 다음으로 이동할 수 있습니다.'} 보기를 선택하거나 답변을 작성하면 자동 저장됩니다. 정답·해설을 보기 전까지 답을 바꿀 수 있습니다. 해설을 본 문항은 수정할 수 없습니다.</p>}
     </>}
   </CourseShell>;
 }
