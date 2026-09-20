@@ -79,9 +79,9 @@ const{isAdmin} = useUser();
 
   useEffect(() => {
     console.log("채팅방 입장 : ",roomId," 라운드 : ",round, "videoId : ",videoId,"isAdmin : ",isAdmin);
-    socket.emit("room:join", { roomId,round,videoId,lessonRound,isAdmin});
+    const joinRoom = () => socket.emit("room:join", { roomId, round, videoId, lessonRound, isAdmin });
 
-    socket.on("room:recent", (payload) => {
+    const onRecent = (payload) => {
       setMessages(payload.messages || []);
       // 초기 렌더 후 기준 높이 기록
       requestAnimationFrame(() => {
@@ -90,22 +90,22 @@ const{isAdmin} = useUser();
         }
       });
       requestAnimationFrame(() => updateHasScroll());
-    });
+    };
 
-    socket.on("message:new", (newMessage) => {
+    const onMessage = (newMessage) => {
       setMessages((prevMessages) => [...prevMessages, newMessage]);
       // 새 메시지는 무조건 하단으로 이동
       setAutoScroll(true);
       requestAnimationFrame(() => updateHasScroll());
-    });
+    };
 
-    socket.on("reaction:update", ({ messageId, reactedUsers, reactionsCount }) => {
+    const onReaction = ({ messageId, reactedUsers, reactionsCount }) => {
       setMessages(prev =>
         prev.map(m => m.id === messageId ? { ...m, reactedUsers, reactionsCount } : m)
       );
-    });
+    };
 
-    socket.on("message:ai", ({ messageId, aiLabels, aiScores, aiLabel, aiScore }) => {
+    const onMessageAi = ({ messageId, aiLabels, aiScores, aiLabel, aiScore }) => {
       setMessages(prev => prev.map(m => m.id === messageId ? {
         ...m,
         aiLabels: Array.isArray(aiLabels) ? aiLabels : (aiLabel ? [aiLabel] : m.aiLabels),
@@ -115,7 +115,7 @@ const{isAdmin} = useUser();
       } : m));
       // 라벨 업데이트 시에도 무조건 하단으로 이동
       setAutoScroll(true);
-    });
+    };
 
     // AI DM listener (private AI DM messages)
     const onAiMent = (payload) => {
@@ -136,16 +136,25 @@ const{isAdmin} = useUser();
       ]);
       setAutoScroll(true);
     };
+    socket.on('room:recent', onRecent);
+    socket.on('message:new', onMessage);
+    socket.on('reaction:update', onReaction);
+    socket.on('message:ai', onMessageAi);
     socket.on('ai:ment', onAiMent);
+    // Socket.IO room membership is lost on reconnect. Register listeners before
+    // joining so the restored history is received on initial entry and recovery.
+    socket.on('connect', joinRoom);
+    if (socket.connected) joinRoom();
 
     return () => {
-      socket.off("room:recent");
-      socket.off("message:new");
-      socket  .off("reaction:update");
-      socket.off("message:ai");
+      socket.off("room:recent", onRecent);
+      socket.off("message:new", onMessage);
+      socket.off("reaction:update", onReaction);
+      socket.off("message:ai", onMessageAi);
       socket.off('ai:ment', onAiMent);
+      socket.off('connect', joinRoom);
     };
-  }, []);
+  }, [roomId, round, videoId, lessonRound, isAdmin]);
 
   useEffect(() => {
     const onResize = () => updateHasScroll();
